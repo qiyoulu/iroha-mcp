@@ -4,14 +4,16 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { loadBrandConfig } from "./config/loadConfig.js";
 import { lintCopy } from "./tools/lintCopy.js";
+import { lintDesign } from "./config/tokens.js";
 import { generateFeedback } from "./tools/generateFeedback.js";
 import { runSetup } from "./tools/setup.js";
+import { runIngest } from "./tools/ingest.js";
 import { extractRules } from "./tools/extractRules.js";
 
 const server = new Server(
   {
     name: "iroha",
-    version: "0.2.0",
+    version: "0.3.0",
   },
   {
     capabilities: {
@@ -39,6 +41,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "lint_design",
+      description:
+        "Lint a CSS / JSX / Tailwind snippet against the brand's design tokens. Flags raw hex outside the palette, off-scale dimensions, and color pairs that fail accessibility contrast. Severity defaults to error per rule; override via rule_severity.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          snippet: { type: "string", description: "the CSS / JSX / Tailwind snippet to lint" },
+          brand_config_path: {
+            type: "string",
+            description: "optional path to a brand.config.json",
+          },
+          rule_severity: {
+            type: "object",
+            description: "override default severity per rule. rules: hard_token_reference, scale_adherence, contrast.",
+            additionalProperties: { type: "string", enum: ["error", "warning", "info"] },
+          },
+        },
+        required: ["snippet"],
+      },
+    },
+    {
       name: "generate_feedback",
       description:
         "Generate structured copy feedback against locked brand rules. Returns summary, violations, suggestions, and an optional rewrite.",
@@ -56,6 +79,35 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
         },
         required: ["draft"],
+      },
+    },
+    {
+      name: "iroha_ingest",
+      description:
+        "Build a brand.config.json from existing brand materials (paths or inline content). Recognizes w3c design tokens JSON, tailwind theme configs, CSS :root blocks, figma variables JSON, and markdown design-system docs (color tokens, typography, spacing, voice, banned register, components, accessibility, logo files). Returns what was extracted, what paths it was applied to, and what couldn't be classified.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          sources: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                path: { type: "string", description: "absolute path to a file (markdown, json, css, js, ts)" },
+                content: { type: "string", description: "inline content (alternative to path)" },
+                format_hint: {
+                  type: "string",
+                  enum: ["w3c-tokens", "tailwind", "css", "markdown", "figma-variables", "auto"],
+                  description: "explicit format. defaults to auto-detect from filename + content shape.",
+                },
+              },
+            },
+            description: "list of brand material sources to ingest",
+          },
+          brand_name: { type: "string", description: "the brand's display name (required)" },
+          target_path: { type: "string", description: "where to write the config (default: ~/.config/iroha-mcp/brand.config.json)" },
+        },
+        required: ["sources", "brand_name"],
       },
     },
     {
@@ -154,6 +206,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return { content };
     }
 
+    if (name === "lint_design") {
+      const snippet = String(a.snippet);
+      const result = loadBrandConfig(a.brand_config_path as string | undefined);
+      const ruleSeverity = (a.rule_severity ?? {}) as Record<string, "error" | "warning" | "info">;
+      const violations = lintDesign({ snippet, brand: result.config, rule_severity: ruleSeverity });
+      const content: Array<{ type: string; text: string }> = [
+        {
+          type: "text",
+          text: JSON.stringify({ brand: result.config.name, violations }, null, 2),
+        },
+      ];
+      if (result.isDefault) {
+        content.push({
+          type: "text",
+          text: `ℹ︎ using default config at ${result.configPath}. edit the file directly to customize your brand rules.`,
+        });
+      }
+      return { content };
+    }
+
     if (name === "generate_feedback") {
       const draft = String(a.draft);
       const context = (a.context as string | undefined) ?? null;
@@ -172,6 +244,35 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
       }
       return { content };
+    }
+
+    if (name === "iroha_ingest") {
+      const sourcesRaw = (a.sources as Array<Record<string, unknown>>) ?? [];
+      const sources = sourcesRaw.map((s) => ({
+        path: s.path as string | undefined,
+        content: s.content as string | undefined,
+        format_hint: s.format_hint as
+          | "w3c-tokens"
+          | "tailwind"
+          | "css"
+          | "markdown"
+          | "figma-variables"
+          | "auto"
+          | undefined,
+      }));
+      const result = runIngest({
+        sources,
+        brand_name: a.brand_name as string | undefined,
+        target_path: a.target_path as string | undefined,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(result, null, 2),
+          },
+        ],
+      };
     }
 
     if (name === "iroha_setup") {

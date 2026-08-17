@@ -13,6 +13,11 @@ const DEFAULT_BRAND_NAME = "your brand";
 
 const DEFAULT_CONFIG: BrandConfig = {
   name: DEFAULT_BRAND_NAME,
+  version: "0.3.0",
+  meta: {
+    source: "manual",
+    schemaVersion: "0.3.0",
+  },
   voice: {
     sentence_case: true,
     proper_nouns: [],
@@ -31,6 +36,31 @@ const DEFAULT_CONFIG: BrandConfig = {
   feedback: {
     tone: "constructive_direct",
     structure: ["summary", "violations", "suggestions", "rewrite"],
+  },
+  tokens: {},
+  copy: {
+    voice: { principles: [] },
+    rules: [],
+    ctas: [],
+    ctaLocks: [],
+    terminology: [],
+    perChannel: [],
+  },
+  assets: { logos: [], fonts: [] },
+  components: { inventory: [] },
+  patterns: { scenarios: [] },
+  accessibility: {
+    contrast: { minimum: 4.5, prefer: "WCAG2" as const },
+    focusRing: { color: "primary", width: "2px", offset: "2px" },
+    minHitTarget: "44px",
+    colorAloneBanned: true,
+    shapeSignalRequired: true,
+  },
+  i18n: {
+    defaultLocale: "en-US",
+    supported: [],
+    doNotTranslate: [],
+    glossary: [],
   },
 };
 

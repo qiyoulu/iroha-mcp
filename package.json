@@ -1,6 +1,6 @@
 {
   "name": "iroha-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "iroha — color into language, language into order. MCP server for brand voice tooling: lint copy and generate feedback against locked brand rules.",
   "type": "module",
   "bin": {

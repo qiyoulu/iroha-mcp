@@ -9,7 +9,9 @@ iroha ships infrastructure, not opinions. the rule engine is generic; your brand
 ## v0 wedge
 
 - `lint_copy` — returns violations with rule, severity, span, and suggestion
+- `lint_design` — flags raw hex outside the palette, off-scale dimensions, and color pairs that fail accessibility contrast. severity configurable per rule.
 - `generate_feedback` — returns summary + violations + suggestions + optional rewrite
+- `iroha_ingest` — build a `brand.config.json` from existing brand materials (paths or inline content). Recognizes w3c design tokens JSON, tailwind theme configs, css `:root` blocks, figma variables JSON, and markdown design-system docs.
 - `iroha_setup` — build a `brand.config.json` from a conversational exchange; merges with any existing config on the target path
 - `extract_rules` — analyze a batch of approved (and optionally rejected) copy and return candidate values for `sentence_case`, `proper_nouns`, `forbidden_words`, exclamation/superlative usage, and CTA style
 
@@ -72,12 +74,28 @@ drop a `brand.config.json` next to your working directory, or pass `brand_config
 
 if no config is found, iroha auto-writes a sensible default to `~/.config/iroha-mcp/brand.config.json` and uses it. the response will note when the default is in use — edit the file directly to customize your brand rules.
 
-for a guided setup, use the `iroha_setup` tool. for an analysis-driven setup, call `extract_rules` against your approved copy samples first, then pass the values you accept into `iroha_setup`.
+for a guided setup, use the `iroha_setup` tool. for an analysis-driven setup, call `extract_rules` against your approved copy samples first, then pass the values you accept into `iroha_setup`. for a materials-driven setup, point `iroha_ingest` at your brand's existing tokens JSON, tailwind config, css `:root` block, or markdown design system.
 
-- copy `brand.config.example.json` to get a blank scaffold with all fields
-- copy `templates/editorial.json`, `templates/saas.json`, etc. for industry scaffolds
-- read `docs/schema-walkthrough.md` for what each field does
-- read `docs/extracting-rules-from-existing-copy.md` for the analysis-driven workflow
+### setup paths
+
+| flow                       | tool                                                | input                                  |
+| -------------------------- | --------------------------------------------------- | -------------------------------------- |
+| conversational Q&A        | `iroha_setup`                                       | field-by-field args                    |
+| materials-driven (this is the recommended path) | `iroha_ingest`                       | paths + inline content + format hints  |
+| analysis-driven (copy)     | `extract_rules` → review → `iroha_setup`            | approved + rejected copy samples       |
+| manual                     | edit the file directly                              | JSON                                   |
+
+### what `iroha_ingest` recognizes
+
+| input shape                | how it's recognized                                    | extracted into                |
+| -------------------------- | ------------------------------------------------------ | ----------------------------- |
+| `.tokens.json` / `.tokens` | `{ "$value", "$type", ... }` w3c format                | `tokens.*`                    |
+| `tailwind.config.{js,ts}`  | `theme.extend.{colors,fontFamily,spacing,...}`         | `tokens.*`                    |
+| `.css` / `:root`           | regex on `--token: value;` declarations                | `tokens.*`                    |
+| figma variables JSON       | `{ "variables": [{ name, resolvedType, valuesByMode }]}` | `tokens.color` / `tokens.dimension` |
+| markdown design-system     | level-1 headings (`# Color Tokens`, `# Voice`, etc.)   | `tokens.*`, `copy.*`, `components.*`, `accessibility.*`, `assets.logos` |
+
+the tool returns applied paths, unresolved entries, and an extraction summary. anything it can't classify shows up in `unresolved` for human review.
 
 ## tutorials
 
@@ -91,13 +109,13 @@ the `docs/` directory has guides on thinking, not what to think:
 
 ## roadmap
 
-v0 (shipped): local-only, stateless, reads config from disk. four tools — `lint_copy`, `generate_feedback`, `iroha_setup`, `extract_rules`.
+v0.3 (shipped): full brand system. six tools — `lint_copy`, `lint_design`, `generate_feedback`, `iroha_ingest`, `iroha_setup`, `extract_rules`. schema covers tokens, copy, assets, components, patterns, accessibility, i18n.
 
-- v1: edit tools — `get_config`, `set_config_field`, `add_forbidden_word`, etc., so you can update your config conversationally through the mcp itself
-- v2: llm-powered `analyze_voice` for nuanced tone comparison (hosted or byok)
-- v3: rule packs — installable brand bundles per industry / archetype
-- v4: hosted team config sync with subscription model
-- v5: Figma plugin to surface violations in design review
+- v0.4: edit tools — `get_config`, `set_config_field`, `add_forbidden_word`, etc., so you can update your config conversationally through the mcp itself
+- v1: llm-powered `analyze_voice` for nuanced tone comparison (hosted or byok)
+- v2: rule packs — installable brand bundles per industry / archetype
+- v3: hosted team config sync with subscription model
+- v4: figma plugin to surface violations in design review
 
 ## license
 

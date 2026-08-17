@@ -16,26 +16,34 @@ export type FeedbackOutput = {
 
 function rewrite(text: string, brand: BrandConfig): string {
   let out = text;
+  const voice = brand.voice ?? {
+    sentence_case: false,
+    proper_nouns: [],
+    forbidden_words: [],
+    preferred_words: {},
+    cta: { style: "free" as const, max_words: 3, require_capitalize: false },
+    tone_markers: { forbid_exclamation: false, forbid_superlatives: false },
+  };
 
-  for (const forbidden of brand.voice.forbidden_words) {
-    const replacement = brand.voice.preferred_words[forbidden.toLowerCase()];
+  for (const forbidden of voice.forbidden_words) {
+    const replacement = voice.preferred_words[forbidden.toLowerCase()];
     if (!replacement) continue;
     const re = new RegExp(`\\b${forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
     out = out.replace(re, replacement);
   }
 
-  if (brand.voice.tone_markers.forbid_exclamation) {
+  if (voice.tone_markers.forbid_exclamation) {
     out = out.replace(/!/g, ".");
   }
 
-  if (brand.voice.tone_markers.forbid_superlatives) {
+  if (voice.tone_markers.forbid_superlatives) {
     out = out.replace(/\b(best|fastest|simplest|greatest|most|ultimate|#1)\b/gi, (match) => {
       return `[${match.toLowerCase()}]`;
     });
   }
 
-  if (brand.voice.sentence_case) {
-    const pnSet = new Set(brand.voice.proper_nouns.map((p) => p.toLowerCase()));
+  if (voice.sentence_case) {
+    const pnSet = new Set(voice.proper_nouns.map((p) => p.toLowerCase()));
     const flagged = detectSentenceCase(out).filter(
       (f) => !pnSet.has(f.word.toLowerCase())
     );
@@ -46,7 +54,7 @@ function rewrite(text: string, brand: BrandConfig): string {
     }
   }
 
-  if (brand.voice.cta.style === "verb_only") {
+  if (voice.cta.style === "verb_only") {
     const ctaSpans = findCtaSpans(out);
     ctaSpans.sort((a, b) => b.start - a.start);
     for (const span of ctaSpans) {
@@ -97,8 +105,12 @@ export function generateFeedback(
     context,
   };
 
-  const structure = brand.feedback.structure;
-  const tone = brand.feedback.tone;
+  const fb = brand.feedback ?? {
+    tone: "constructive_direct" as const,
+    structure: ["summary", "violations", "suggestions", "rewrite"] as const,
+  };
+  const structure = fb.structure;
+  const tone = fb.tone;
 
   if (structure.includes("summary")) feedback.summary = buildSummary(violations, brand.name, tone);
   if (structure.includes("violations")) feedback.violations = violations;

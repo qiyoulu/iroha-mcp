@@ -71,7 +71,14 @@ function escapeRegex(s: string): string {
 
 export function lintCopy(text: string, brand: BrandConfig): Violation[] {
   const violations: Violation[] = [];
-  const voice = brand.voice;
+  const voice = brand.voice ?? {
+    sentence_case: false,
+    proper_nouns: [],
+    forbidden_words: [],
+    preferred_words: {},
+    cta: { style: "free" as const, max_words: 3, require_capitalize: false },
+    tone_markers: { forbid_exclamation: false, forbid_superlatives: false },
+  };
 
   if (voice.sentence_case) {
     let flagged = detectSentenceCase(text);

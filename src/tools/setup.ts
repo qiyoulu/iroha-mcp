@@ -27,27 +27,42 @@ export type SetupArgs = {
 
 function buildConfigFromArgs(base: BrandConfig, args: Record<string, unknown>): BrandConfig {
   const a = args as Partial<SetupArgs>;
+  const baseVoice = base.voice ?? {
+    sentence_case: false,
+    proper_nouns: [],
+    forbidden_words: [],
+    preferred_words: {},
+    cta: { style: "free" as const, max_words: 3, require_capitalize: false },
+    tone_markers: { forbid_exclamation: false, forbid_superlatives: false },
+  };
+  const baseFeedback = base.feedback ?? {
+    tone: "constructive_direct" as const,
+    structure: ["summary", "violations", "suggestions", "rewrite"] as const,
+  };
   return {
+    ...base,
     name: a.name ?? base.name,
+    version: base.version ?? "0.3.0",
     voice: {
-      sentence_case: a.sentence_case ?? base.voice.sentence_case,
-      proper_nouns: a.proper_nouns ?? base.voice.proper_nouns,
-      forbidden_words: a.forbidden_words ?? base.voice.forbidden_words,
-      preferred_words: a.preferred_words ?? base.voice.preferred_words,
+      ...baseVoice,
+      sentence_case: a.sentence_case ?? baseVoice.sentence_case,
+      proper_nouns: a.proper_nouns ?? baseVoice.proper_nouns,
+      forbidden_words: a.forbidden_words ?? baseVoice.forbidden_words,
+      preferred_words: a.preferred_words ?? baseVoice.preferred_words,
       cta: {
-        style: a.cta_style ?? base.voice.cta.style,
-        max_words: a.cta_max_words ?? base.voice.cta.max_words,
+        style: a.cta_style ?? baseVoice.cta.style,
+        max_words: a.cta_max_words ?? baseVoice.cta.max_words,
         require_capitalize:
-          a.cta_require_capitalize ?? base.voice.cta.require_capitalize,
+          a.cta_require_capitalize ?? baseVoice.cta.require_capitalize,
       },
       tone_markers: {
-        forbid_exclamation: a.forbid_exclamation ?? base.voice.tone_markers.forbid_exclamation,
-        forbid_superlatives: a.forbid_superlatives ?? base.voice.tone_markers.forbid_superlatives,
+        forbid_exclamation: a.forbid_exclamation ?? baseVoice.tone_markers.forbid_exclamation,
+        forbid_superlatives: a.forbid_superlatives ?? baseVoice.tone_markers.forbid_superlatives,
       },
     },
     feedback: {
-      tone: a.feedback_tone ?? base.feedback.tone,
-      structure: a.feedback_structure ?? base.feedback.structure,
+      tone: a.feedback_tone ?? baseFeedback.tone,
+      structure: a.feedback_structure ?? [...baseFeedback.structure],
     },
   };
 }
