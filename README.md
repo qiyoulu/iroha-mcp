@@ -13,7 +13,7 @@ iroha ships infrastructure, not opinions. the rule engine is generic; your brand
 - `generate_feedback` — returns summary + violations + suggestions + optional rewrite
 - `iroha_ingest` — build a `brand.config.json` from existing brand materials (paths or inline content). Recognizes w3c design tokens JSON, JSON5 (primer primitives), tailwind theme configs, css `:root` blocks, figma variables JSON, style-dictionary/polaris flat token JSON, and markdown design-system docs. Handles composite `$value` objects (typography, shadow, border, gradient, dimension), `{base.*}` and `{!name}` reference resolution, `$extensions` traversal, and mode-aware token overrides.
 - `iroha_setup` — build a `brand.config.json` from a conversational exchange; merges with any existing config on the target path
-- `extract_rules` — analyze a batch of approved (and optionally rejected) copy and return candidate values for `sentence_case`, `proper_nouns`, `forbidden_words`, exclamation/superlative usage, and CTA style
+- `extract_rules` — analyze a batch of approved (and optionally rejected) copy and CSS, returning candidate values for `sentence_case`, `proper_nouns`, `forbidden_words`, exclamation/superlative usage, CTA style, and from approved CSS: color palette, font families, spacing scale, radius scale
 
 ## install
 
@@ -97,7 +97,7 @@ for a guided setup, use the `iroha_setup` tool. for an analysis-driven setup, ca
 | figma variables JSON       | `{ "variables": [{ name, resolvedType, valuesByMode }] }` | `tokens.color` / `tokens.dimension` |
 | markdown design-system     | level-1 headings (`# Color Tokens`, `# Voice`, etc.)   | `tokens.*`, `copy.*`, `components.*`, `accessibility.*`, `assets.logos` |
 
-the tool returns applied paths, unresolved entries, and an extraction summary. anything it can't classify shows up in `unresolved` for human review.
+the tool returns applied paths, unresolved entries, and an extraction summary. anything it can't classify shows up in `unresolved` for human review. one caveat: unscoped scales (e.g. primer's `neutral.0` and `coral.0`) flatten to the same bare key (`color.0`), so the last one wins — for full namespacing, prefer sources with group-qualified names.
 
 ## tutorials
 
@@ -111,11 +111,15 @@ the `docs/` directory has guides on thinking, not what to think:
 
 ## roadmap
 
+v0.2 (shipped): initial release — auto-init default config, `proper_nouns` allowlist, `iroha_setup` + `extract_rules` tools, 45 tests.
+
 v0.3 (shipped): full brand system. six tools — `lint_copy`, `lint_design`, `generate_feedback`, `iroha_ingest`, `iroha_setup`, `extract_rules`. schema covers tokens, copy, assets, components, patterns, accessibility, i18n.
+
+v0.4 (shipped): w3c reference resolution (`{group.token}` + `#/...` JSON pointer, cycle detection), mode/theme extraction (class + attribute selectors), `mode_coverage` rule in `lint_design`, CSS-side rule extraction in `extract_rules`.
 
 v0.5 (shipped): real-world ingest. JSON5 support (primer primitives), style-dictionary/polaris flat format, composite `$value` parsing (typography, shadow, border, transition, gradient), `{base.*}` wrapper unwrapping with ref rewrite, `{!name}` alias references, `$extensions` traversal, `time` → transition mapping. validated against primer primitives (98 light colors, 0 unresolved) and polaris-tokens (73 tokens, 0 unresolved).
 
-- v0.4: edit tools — `get_config`, `set_config_field`, `add_forbidden_word`, etc., so you can update your config conversationally through the mcp itself
+- v0.6: edit tools — `get_config`, `set_config_field`, `add_forbidden_word`, etc., so you can update your config conversationally through the mcp itself
 - v1: llm-powered `analyze_voice` for nuanced tone comparison (hosted or byok)
 - v2: rule packs — installable brand bundles per industry / archetype
 - v3: hosted team config sync with subscription model
