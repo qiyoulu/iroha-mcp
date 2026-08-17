@@ -11,7 +11,7 @@ iroha ships infrastructure, not opinions. the rule engine is generic; your brand
 - `lint_copy` — returns violations with rule, severity, span, and suggestion
 - `lint_design` — flags raw hex outside the palette, off-scale dimensions, and color pairs that fail accessibility contrast. severity configurable per rule.
 - `generate_feedback` — returns summary + violations + suggestions + optional rewrite
-- `iroha_ingest` — build a `brand.config.json` from existing brand materials (paths or inline content). Recognizes w3c design tokens JSON, tailwind theme configs, css `:root` blocks, figma variables JSON, and markdown design-system docs.
+- `iroha_ingest` — build a `brand.config.json` from existing brand materials (paths or inline content). Recognizes w3c design tokens JSON, JSON5 (primer primitives), tailwind theme configs, css `:root` blocks, figma variables JSON, style-dictionary/polaris flat token JSON, and markdown design-system docs. Handles composite `$value` objects (typography, shadow, border, gradient, dimension), `{base.*}` and `{!name}` reference resolution, `$extensions` traversal, and mode-aware token overrides.
 - `iroha_setup` — build a `brand.config.json` from a conversational exchange; merges with any existing config on the target path
 - `extract_rules` — analyze a batch of approved (and optionally rejected) copy and return candidate values for `sentence_case`, `proper_nouns`, `forbidden_words`, exclamation/superlative usage, and CTA style
 
@@ -90,9 +90,11 @@ for a guided setup, use the `iroha_setup` tool. for an analysis-driven setup, ca
 | input shape                | how it's recognized                                    | extracted into                |
 | -------------------------- | ------------------------------------------------------ | ----------------------------- |
 | `.tokens.json` / `.tokens` | `{ "$value", "$type", ... }` w3c format                | `tokens.*`                    |
+| `.json5`                   | JSON5 syntax (unquoted keys, single quotes, comments)  | `tokens.*`                    |
+| `{ "props", "aliases" }`   | style-dictionary / polaris flat format with `{!name}` refs | `tokens.*`                 |
 | `tailwind.config.{js,ts}`  | `theme.extend.{colors,fontFamily,spacing,...}`         | `tokens.*`                    |
 | `.css` / `:root`           | regex on `--token: value;` declarations                | `tokens.*`                    |
-| figma variables JSON       | `{ "variables": [{ name, resolvedType, valuesByMode }]}` | `tokens.color` / `tokens.dimension` |
+| figma variables JSON       | `{ "variables": [{ name, resolvedType, valuesByMode }] }` | `tokens.color` / `tokens.dimension` |
 | markdown design-system     | level-1 headings (`# Color Tokens`, `# Voice`, etc.)   | `tokens.*`, `copy.*`, `components.*`, `accessibility.*`, `assets.logos` |
 
 the tool returns applied paths, unresolved entries, and an extraction summary. anything it can't classify shows up in `unresolved` for human review.
@@ -110,6 +112,8 @@ the `docs/` directory has guides on thinking, not what to think:
 ## roadmap
 
 v0.3 (shipped): full brand system. six tools — `lint_copy`, `lint_design`, `generate_feedback`, `iroha_ingest`, `iroha_setup`, `extract_rules`. schema covers tokens, copy, assets, components, patterns, accessibility, i18n.
+
+v0.5 (shipped): real-world ingest. JSON5 support (primer primitives), style-dictionary/polaris flat format, composite `$value` parsing (typography, shadow, border, transition, gradient), `{base.*}` wrapper unwrapping with ref rewrite, `{!name}` alias references, `$extensions` traversal, `time` → transition mapping. validated against primer primitives (98 light colors, 0 unresolved) and polaris-tokens (73 tokens, 0 unresolved).
 
 - v0.4: edit tools — `get_config`, `set_config_field`, `add_forbidden_word`, etc., so you can update your config conversationally through the mcp itself
 - v1: llm-powered `analyze_voice` for nuanced tone comparison (hosted or byok)

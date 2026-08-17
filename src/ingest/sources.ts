@@ -37,6 +37,8 @@ export function readSource(source: IngestSource): RecognizedSource {
 export function detectFormat(raw: string, identifier: string): RecognizedSource["format"] {
   const filename = identifier.toLowerCase();
   if (filename.endsWith(".tokens.json") || filename.endsWith(".tokens")) return "w3c-tokens";
+  if (filename.endsWith(".json5")) return "w3c-tokens";
+  if (filename.endsWith(".yml") || filename.endsWith(".yaml")) return "w3c-tokens";
   if (
     filename.includes("tailwind.config") ||
     /^module\.exports\s*=/m.test(raw) ||
@@ -56,7 +58,11 @@ export function detectFormat(raw: string, identifier: string): RecognizedSource[
     return "figma-variables";
   }
 
-  if (/"\$\w+"\s*:/m.test(raw) || /"\$\w+"\s*:/m.test(raw)) {
+  if (/^"?props"?\s*:\s*\{/m.test(raw) || /^"?aliases"?\s*:\s*\{/m.test(raw)) {
+    return "w3c-tokens";
+  }
+
+  if (/"\$\w+"\s*:/m.test(raw) || /\$value\s*:/m.test(raw) || /\$type\s*:/m.test(raw)) {
     return "w3c-tokens";
   }
   if (/--[\w-]+\s*:/m.test(raw)) {

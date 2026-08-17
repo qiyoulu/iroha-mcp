@@ -66,7 +66,9 @@ export function flattenDimensionScale(tokens: BrandConfig["tokens"]): number[] {
   if (!tokens?.dimension) return [];
   const scale: number[] = [];
   for (const value of Object.values(tokens.dimension)) {
-    const match = value.match(/^(-?\d+(?:\.\d+)?)(px|rem|em)$/);
+    const str = typeof value === "string" ? value : null;
+    if (!str) continue;
+    const match = str.match(/^(-?\d+(?:\.\d+)?)(px|rem|em)$/);
     if (match) {
       const num = parseFloat(match[1]);
       const unit = match[2];

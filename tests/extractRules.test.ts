@@ -141,6 +141,22 @@ test("extract_rules extracts spacing scale from padding/margin", () => {
   assert.ok(result.suggestions.spacing_scale?.includes("16px"));
 });
 
+test("extract_rules excludes border-radius values from spacing scale", () => {
+  const result = extractRules({
+    approved: [],
+    approved_css: [
+      `.btn { padding: 8px 16px; border-radius: 9999px; }`,
+      `.btn-lg { padding: 16px 32px; border-radius: 4px; }`,
+      `.card { padding: 24px; border-radius: 8px; }`,
+    ],
+  });
+  assert.ok(result.suggestions.spacing_scale);
+  assert.ok(result.suggestions.spacing_scale?.includes("8px"));
+  assert.ok(result.suggestions.spacing_scale?.includes("16px"));
+  assert.ok(!result.suggestions.spacing_scale?.includes("9999px"));
+  assert.ok(!result.suggestions.spacing_scale?.includes("4px"));
+});
+
 test("extract_rules extracts radius scale", () => {
   const result = extractRules({
     approved: [],

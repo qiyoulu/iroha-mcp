@@ -1,3 +1,4 @@
+import JSON5 from "json5";
 import type { BrandConfig } from "../config/schema.js";
 import type { RecognizedSource } from "./sources.js";
 
@@ -79,11 +80,7 @@ function resolveReference(
   depth: number
 ): { resolved: unknown; ok: boolean } {
   if (depth > MAX_REFERENCE_DEPTH) return { resolved: ref, ok: false };
-  const path = ref.startsWith("{") && ref.endsWith("}")
-    ? ref.slice(1, -1).split(".").filter((s) => s.length > 0)
-    : ref.startsWith("#/")
-      ? ref.slice(2).split("/").filter((s) => s.length > 0).map((s) => s.replace(/\$value$/, "")).filter(Boolean)
-      : null;
+  const path = parseReferencePath(ref);
   if (!path) return { resolved: ref, ok: false };
   if (path[path.length - 1] === "$value") path.pop();
   const key = path.join(".");
@@ -91,10 +88,35 @@ function resolveReference(
   visited.add(key);
   const target = lookup.get(key);
   if (target === undefined) return { resolved: ref, ok: false };
-  if (typeof target === "string" && (target.startsWith("{") || target.startsWith("#/"))) {
+  if (typeof target === "string" && isReferenceString(target)) {
     return resolveReference(target, lookup, new Set(visited), depth + 1);
   }
   return { resolved: target, ok: true };
+}
+
+function isReferenceString(s: string): boolean {
+  return s.startsWith("{") || s.startsWith("#/");
+}
+
+function parseReferencePath(ref: string): string[] | null {
+  if (ref.startsWith("{") && ref.endsWith("}")) {
+    const inner = ref.slice(1, -1);
+    if (inner.startsWith("!") || inner.includes("{")) return null;
+    return inner.split(/[.\s]/).filter((s) => s.length > 0);
+  }
+  if (ref.startsWith("{!") && ref.endsWith("}")) {
+    const inner = ref.slice(2, -1).trim();
+    return inner.split(/[.\s]/).filter((s) => s.length > 0);
+  }
+  if (ref.startsWith("#/")) {
+    return ref
+      .slice(2)
+      .split("/")
+      .filter((s) => s.length > 0)
+      .map((s) => s.replace(/\$value$/, ""))
+      .filter(Boolean);
+  }
+  return null;
 }
 
 function parseW3cTokens(source: RecognizedSource, config: BrandConfig): ParsedContribution {
@@ -104,7 +126,7 @@ function parseW3cTokens(source: RecognizedSource, config: BrandConfig): ParsedCo
 
   let raw: unknown;
   try {
-    raw = JSON.parse(source.raw);
+    raw = parseJsonish(source.raw);
   } catch (err) {
     return {
       source_id: source.identifier,
@@ -112,6 +134,103 @@ function parseW3cTokens(source: RecognizedSource, config: BrandConfig): ParsedCo
       applied_paths: [],
       unresolved: [`not valid JSON: ${(err as Error).message}`],
       extracted_summary: {},
+    };
+  }
+
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const obj = raw as Record<string, unknown>;
+    if (obj.base && typeof obj.base === "object" && !Array.isArray(obj.base)) {
+      raw = obj.base;
+      const fixBaseRefs = (value: unknown): unknown => {
+        if (typeof value === "string") {
+          return value.replace(/\{base\./g, "{");
+        }
+        return value;
+      };
+      const walk = (node: unknown): void => {
+        if (Array.isArray(node)) {
+          node.forEach(walk);
+        } else if (node && typeof node === "object") {
+          for (const k of Object.keys(node as Record<string, unknown>)) {
+            const v = (node as Record<string, unknown>)[k];
+            if (typeof v === "string") {
+              (node as Record<string, unknown>)[k] = fixBaseRefs(v);
+            } else {
+              walk(v);
+            }
+          }
+        }
+      };
+      walk(raw);
+    }
+  }
+
+  if (raw && typeof raw === "object" && (raw as Record<string, unknown>).props && (raw as Record<string, unknown>).aliases) {
+    const flat: Array<Record<string, unknown>> = [];
+    const aliases = (raw as Record<string, unknown>).aliases as Record<string, { value: string | number }>;
+    const props = (raw as Record<string, unknown>).props as Record<string, { type?: string; category?: string; name?: string; value?: unknown; originalValue?: string }>;
+    for (const [name, prop] of Object.entries(props)) {
+      const token: Record<string, unknown> = { $value: prop.value, $type: prop.type };
+      if (prop.originalValue && typeof prop.originalValue === "string" && prop.originalValue.includes("{")) {
+        token.$value = prop.originalValue;
+      }
+      if (aliases && aliases[name]) {
+        token.$value = aliases[name].value;
+      }
+      flat.push({ ...token, __name: name, __propName: prop.category ?? prop.name ?? name });
+    }
+    const tokens = ensureTokens(config);
+    for (const token of flat) {
+      const name = token.__name as string;
+      const propName = token.__propName as string;
+      const category = inferCategory(propName, token.$type as string);
+      if (!category) {
+        unresolved.push(`${name} (no category)`);
+        continue;
+      }
+      const key = stripCategoryPrefix(name, category);
+      if (category === "color") {
+        if (!tokens.color) tokens.color = {};
+        tokens.color[key] = normalizeColor(token.$value);
+      } else if (category === "typography") {
+        if (!tokens.typography) tokens.typography = {};
+        tokens.typography[key] = normalizeTypography(token.$value);
+      } else if (category === "dimension") {
+        if (!tokens.dimension) tokens.dimension = {};
+        tokens.dimension[key] = normalizeDimension(token.$value);
+      } else if (category === "shadow") {
+        if (!tokens.shadow) tokens.shadow = {};
+        tokens.shadow[key] = normalizeShadow(token.$value);
+      } else if (category === "border") {
+        if (!tokens.border) tokens.border = {};
+        tokens.border[key] = normalizeBorder(token.$value);
+      } else if (category === "transition") {
+        if (!tokens.transition) tokens.transition = {};
+        tokens.transition[key] = normalizeTransition(token.$value);
+      } else if (category === "gradient") {
+        if (!tokens.gradient) tokens.gradient = {};
+        tokens.gradient[key] = normalizeGradient(token.$value);
+      } else if (category === "breakpoint") {
+        if (!tokens.breakpoint) tokens.breakpoint = {};
+        const v = token.$value;
+        const n = typeof v === "number" ? v : Number(v);
+        if (!Number.isNaN(n)) tokens.breakpoint[key] = n;
+      }
+      applied.push(`${category}.${key}`);
+    }
+    summary.token_count = applied.length;
+    config.meta = {
+      ...config.meta,
+      source: "polaris",
+      schemaVersion: config.meta?.schemaVersion ?? "0.3.0",
+      ingestionDate: new Date().toISOString().slice(0, 10),
+    };
+    return {
+      source_id: source.identifier,
+      format: source.format,
+      applied_paths: applied,
+      unresolved,
+      extracted_summary: summary,
     };
   }
 
@@ -129,13 +248,39 @@ function parseW3cTokens(source: RecognizedSource, config: BrandConfig): ParsedCo
     const item = flat[i];
     if (typeof item.value === "string") {
       const ref = item.value.trim();
-      if (ref.startsWith("{") || ref.startsWith("#/")) {
+      if (isReferenceString(ref)) {
         const { resolved, ok } = resolveReference(ref, lookup, new Set([item.path.join(".")]), 0);
         if (ok) {
           flat[i] = { ...item, value: resolved };
           lookup.set(item.path.join("."), resolved);
         } else {
           unresolved.push(`${item.path.join(".")} -> ${ref}`);
+        }
+      }
+    }
+  }
+
+  for (let i = 0; i < flat.length; i++) {
+    const item = flat[i];
+    if (item.raw?.$extensions) {
+      const ext = item.raw.$extensions as Record<string, unknown>;
+      for (const [namespace, value] of Object.entries(ext)) {
+        if (namespace === "org.primer.figma" || namespace.startsWith("org.primer.")) continue;
+        if (value && typeof value === "object") {
+          for (const [modeKey, modeVal] of Object.entries(value)) {
+            if (typeof modeVal === "string" && isReferenceString(modeVal.trim())) {
+              const { resolved, ok } = resolveReference(
+                modeVal.trim(),
+                lookup,
+                new Set([item.path.join(".")]),
+                0
+              );
+              if (ok) {
+                const extObj = item.raw!.$extensions as Record<string, Record<string, unknown>>;
+                extObj[namespace] = { ...extObj[namespace], [modeKey]: resolved };
+              }
+            }
+          }
         }
       }
     }
@@ -156,29 +301,28 @@ function parseW3cTokens(source: RecognizedSource, config: BrandConfig): ParsedCo
 
   for (const { path, value, type } of flat) {
     if (path.length === 0) continue;
-    const category = inferCategory(path[0], type);
+    const category = inferCategoryFromPath(path, type);
     if (!category) {
       unresolved.push(`${path.join(".")} (no category)`);
       continue;
     }
     const key = stripCategoryPrefix(path[path.length - 1], category);
     if (category === "color") {
-      tokenBuckets.color[key] = typeof value === "string" ? value : JSON.stringify(value);
+      tokenBuckets.color[key] = normalizeColor(value);
     } else if (category === "typography") {
-      tokenBuckets.typography[key] = value;
+      tokenBuckets.typography[key] = normalizeTypography(value);
     } else if (category === "shadow") {
-      tokenBuckets.shadow[key] = value;
+      tokenBuckets.shadow[key] = normalizeShadow(value);
     } else if (category === "border") {
-      tokenBuckets.border[key] = value;
+      tokenBuckets.border[key] = normalizeBorder(value);
     } else if (category === "transition") {
-      tokenBuckets.transition[key] = value;
+      tokenBuckets.transition[key] = normalizeTransition(value);
     } else if (category === "gradient") {
-      tokenBuckets.gradient[key] = value;
+      tokenBuckets.gradient[key] = normalizeGradient(value);
     } else if (category === "breakpoint") {
       tokenBuckets.breakpoint[key] = typeof value === "number" ? value : Number(value);
     } else if (category === "dimension") {
-      const strVal = typeof value === "string" ? value : JSON.stringify(value);
-      tokenBuckets.dimension[key] = strVal;
+      tokenBuckets.dimension[key] = normalizeDimension(value);
     }
     applied.push(`${category}.${key}`);
   }
@@ -208,6 +352,10 @@ function parseW3cTokens(source: RecognizedSource, config: BrandConfig): ParsedCo
   };
 }
 
+function parseJsonish(raw: string): unknown {
+  return JSON5.parse(raw);
+}
+
 function stripCategoryPrefix(name: string, category: string): string {
   const n = name.toLowerCase();
   const c = category.toLowerCase();
@@ -223,12 +371,31 @@ function stripCategoryPrefix(name: string, category: string): string {
   return name;
 }
 
+function inferCategoryFromPath(path: string[], w3cType?: string): string | null {
+  if (w3cType === "color") return "color";
+  if (w3cType === "typography") return "typography";
+  if (w3cType === "shadow") return "shadow";
+  if (w3cType === "border") return "border";
+  if (w3cType === "transition" || w3cType === "time") return "transition";
+  if (w3cType === "gradient") return "gradient";
+  if (w3cType === "dimension") return "dimension";
+  if (w3cType === "fontFamily" || w3cType === "fontWeight") return "typography";
+
+  const skip = new Set(["base", "tokens", "primitive", "primitives", "value", "values"]);
+  for (const segment of path) {
+    if (skip.has(segment.toLowerCase())) continue;
+    const inferred = inferCategory(segment);
+    if (inferred) return inferred;
+  }
+  return null;
+}
+
 function inferCategory(name: string, w3cType?: string): string | null {
   if (w3cType === "color") return "color";
   if (w3cType === "typography") return "typography";
   if (w3cType === "shadow") return "shadow";
   if (w3cType === "border") return "border";
-  if (w3cType === "transition") return "transition";
+  if (w3cType === "transition" || w3cType === "time") return "transition";
   if (w3cType === "gradient") return "gradient";
   if (w3cType === "dimension") return "dimension";
   if (w3cType === "fontFamily" || w3cType === "fontWeight") return "typography";
@@ -268,6 +435,87 @@ function inferCategory(name: string, w3cType?: string): string | null {
   )
     return "dimension";
   return null;
+}
+
+function normalizeColor(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.hex === "string") return obj.hex;
+    if (Array.isArray(obj.components)) {
+      const cs = (obj.colorSpace ?? "srgb").toString().toLowerCase();
+      if (cs === "srgb" && obj.components.length >= 3) {
+        const [r, g, b] = obj.components;
+        const a = typeof obj.alpha === "number" ? obj.alpha : 1;
+        const to255 = (n: number) => {
+          const v = Math.max(0, Math.min(255, Math.round(n * 255)));
+          return v.toString(16).padStart(2, "0");
+        };
+        const hex = `#${to255(r)}${to255(g)}${to255(b)}`;
+        return a < 1 ? hex + to255(a) : hex;
+      }
+    }
+  }
+  return JSON.stringify(value);
+}
+
+function normalizeDimension(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.value === "number" && typeof obj.unit === "string") {
+      return `${obj.value}${obj.unit}`;
+    }
+  }
+  return JSON.stringify(value);
+}
+
+function normalizeTypography(value: unknown): string | Record<string, unknown> {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (
+      obj.fontFamily || obj.fontSize || obj.fontWeight || obj.lineHeight || obj.letterSpacing
+    ) {
+      return obj;
+    }
+  }
+  return JSON.stringify(value);
+}
+
+function normalizeShadow(value: unknown): string | Record<string, unknown> | Array<Record<string, unknown>> {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map((v) => (typeof v === "object" && v !== null ? (v as Record<string, unknown>) : { value: v }));
+  }
+  if (value && typeof value === "object") {
+    return value as Record<string, unknown>;
+  }
+  return JSON.stringify(value);
+}
+
+function normalizeBorder(value: unknown): string | Record<string, unknown> {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    return value as Record<string, unknown>;
+  }
+  return JSON.stringify(value);
+}
+
+function normalizeTransition(value: unknown): string | Record<string, unknown> {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    return value as Record<string, unknown>;
+  }
+  return JSON.stringify(value);
+}
+
+function normalizeGradient(value: unknown): string | Record<string, unknown> {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    return value as Record<string, unknown>;
+  }
+  return JSON.stringify(value);
 }
 
 function parseTailwind(source: RecognizedSource, config: BrandConfig): ParsedContribution {

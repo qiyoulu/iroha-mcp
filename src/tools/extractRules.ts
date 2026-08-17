@@ -317,12 +317,18 @@ function extractDimension(approved: string[], contextRe: RegExp): {
 } {
   const counts = new Map<string, number>();
   for (const snippet of approved) {
-    const lines = snippet.split("\n");
-    for (const line of lines) {
-      if (!contextRe.test(line)) continue;
+    const declarations = snippet.split(";");
+    for (const declaration of declarations) {
+      const match = declaration.match(/([\w-]+)\s*:\s*([^;]+)/);
+      if (!match) continue;
+      const property = match[1].trim().toLowerCase();
+      if (!contextRe.test(property)) continue;
+      if (property === "border-radius") continue;
+      if (property.startsWith("border-") && property.endsWith("-radius")) continue;
+      const value = match[2];
       const re = /(-?\d+(?:\.\d+)?(?:px|rem|em))/g;
       let m: RegExpExecArray | null;
-      while ((m = re.exec(line)) !== null) {
+      while ((m = re.exec(value)) !== null) {
         counts.set(m[1], (counts.get(m[1]) ?? 0) + 1);
       }
     }

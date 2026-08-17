@@ -131,18 +131,69 @@ export const ColorTokenSchema = z.union([
   }),
 ]);
 
+export const TypographyCompositeSchema = z.object({
+  fontFamily: z.union([z.string(), z.array(z.string())]).optional(),
+  fontSize: z.union([z.string(), z.number()]).optional(),
+  fontWeight: z.union([z.string(), z.number()]).optional(),
+  letterSpacing: z.union([z.string(), z.number()]).optional(),
+  lineHeight: z.union([z.string(), z.number()]).optional(),
+});
+
+export const ShadowCompositeSchema = z.object({
+  color: z.string().optional(),
+  offsetX: z.union([z.string(), z.number()]).optional(),
+  offsetY: z.union([z.string(), z.number()]).optional(),
+  blur: z.union([z.string(), z.number()]).optional(),
+  spread: z.union([z.string(), z.number()]).optional(),
+  inset: z.boolean().optional(),
+});
+
+export const BorderCompositeSchema = z.object({
+  color: z.string().optional(),
+  width: z.union([z.string(), z.number()]).optional(),
+  style: z.string().optional(),
+});
+
+export const TransitionCompositeSchema = z.object({
+  duration: z.union([z.string(), z.number()]).optional(),
+  delay: z.union([z.string(), z.number()]).optional(),
+  timingFunction: z.string().optional(),
+});
+
+export const GradientCompositeSchema = z.object({
+  stops: z.array(z.object({
+    color: z.string(),
+    position: z.number().min(0).max(1),
+  })).optional(),
+  angle: z.number().optional(),
+});
+
+export const ColorComponentsSchema = z.object({
+  colorSpace: z.string().optional(),
+  components: z.array(z.number()).optional(),
+  alpha: z.number().optional(),
+  hex: z.string().optional(),
+});
+
+export const DimensionComponentsSchema = z.object({
+  value: z.number().optional(),
+  unit: z.string().optional(),
+});
+
 export const ModeOverrideSchema = z.object({
   name: z.string(),
   selector: z.string().optional(),
-  tokenOverrides: z
+    tokenOverrides: z
     .object({
-      color: z.record(z.string(), ColorTokenSchema).optional(),
-      typography: z.record(z.string(), z.unknown()).optional(),
-      dimension: z.record(z.string(), z.string()).optional(),
-      shadow: z.record(z.string(), z.unknown()).optional(),
-      border: z.record(z.string(), z.unknown()).optional(),
-      transition: z.record(z.string(), z.unknown()).optional(),
-      gradient: z.record(z.string(), z.unknown()).optional(),
+      color: z.record(z.string(), z.union([z.string(), ColorTokenSchema, ColorComponentsSchema])).optional(),
+      typography: z.record(z.string(), z.union([z.string(), TypographyCompositeSchema])).optional(),
+      dimension: z.record(z.string(), z.union([z.string(), DimensionComponentsSchema])).optional(),
+      shadow: z
+        .record(z.string(), z.union([z.string(), ShadowCompositeSchema, z.array(ShadowCompositeSchema)]))
+        .optional(),
+      border: z.record(z.string(), z.union([z.string(), BorderCompositeSchema])).optional(),
+      transition: z.record(z.string(), z.union([z.string(), TransitionCompositeSchema])).optional(),
+      gradient: z.record(z.string(), z.union([z.string(), GradientCompositeSchema])).optional(),
       breakpoint: z.record(z.string(), z.number()).optional(),
     })
     .optional(),
@@ -150,13 +201,19 @@ export const ModeOverrideSchema = z.object({
 
 export const TokensSchema = z
   .object({
-    color: z.record(z.string(), ColorTokenSchema).optional(),
-    typography: z.record(z.string(), z.unknown()).optional(),
-    dimension: z.record(z.string(), z.string()).optional(),
-    shadow: z.record(z.string(), z.unknown()).optional(),
-    border: z.record(z.string(), z.unknown()).optional(),
-    transition: z.record(z.string(), z.unknown()).optional(),
-    gradient: z.record(z.string(), z.unknown()).optional(),
+    color: z.record(z.string(), z.union([z.string(), ColorTokenSchema, ColorComponentsSchema])).optional(),
+    typography: z
+      .record(z.string(), z.union([z.string(), TypographyCompositeSchema]))
+      .optional(),
+    dimension: z
+      .record(z.string(), z.union([z.string(), DimensionComponentsSchema]))
+      .optional(),
+    shadow: z
+      .record(z.string(), z.union([z.string(), ShadowCompositeSchema, z.array(ShadowCompositeSchema)]))
+      .optional(),
+    border: z.record(z.string(), z.union([z.string(), BorderCompositeSchema])).optional(),
+    transition: z.record(z.string(), z.union([z.string(), TransitionCompositeSchema])).optional(),
+    gradient: z.record(z.string(), z.union([z.string(), GradientCompositeSchema])).optional(),
     breakpoint: z.record(z.string(), z.number()).optional(),
     modes: z.array(ModeOverrideSchema).optional(),
   })
@@ -286,6 +343,8 @@ export const MetaSchema = z
         "markdown",
         "figma",
         "styledictionary",
+        "polaris",
+        "primer",
         "manual",
         "mixed",
       ])
@@ -317,6 +376,13 @@ export type CopyConfig = z.infer<typeof CopyConfigSchema>;
 export type CopyRule = z.infer<typeof CopyRuleSchema>;
 export type Tokens = z.infer<typeof TokensSchema>;
 export type ModeOverride = z.infer<typeof ModeOverrideSchema>;
+export type TypographyComposite = z.infer<typeof TypographyCompositeSchema>;
+export type ShadowComposite = z.infer<typeof ShadowCompositeSchema>;
+export type BorderComposite = z.infer<typeof BorderCompositeSchema>;
+export type TransitionComposite = z.infer<typeof TransitionCompositeSchema>;
+export type GradientComposite = z.infer<typeof GradientCompositeSchema>;
+export type ColorComponents = z.infer<typeof ColorComponentsSchema>;
+export type DimensionComponents = z.infer<typeof DimensionComponentsSchema>;
 export type Assets = z.infer<typeof AssetsSchema>;
 export type Components = z.infer<typeof ComponentsSchema>;
 export type Patterns = z.infer<typeof PatternsSchema>;
