@@ -161,7 +161,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "extract_rules",
       description:
-        "Extract brand rule candidates from approved copy samples. Returns suggested values for sentence_case, proper_nouns, forbidden_words (when rejected samples are also provided), exclamation/superlative usage, and observed CTA style. Review the suggestions, then pass accepted values to `iroha_setup` to write them.",
+        "Extract brand rule candidates from approved (and optionally rejected) copy AND css samples. Returns suggested values for sentence_case, proper_nouns, forbidden_words (when rejected copy is provided), exclamation/superlative usage, CTA style, AND from approved_css: color palette, font families, spacing scale, radius scale. Review the suggestions, then pass accepted values to `iroha_setup` to write them.",
       inputSchema: {
         type: "object",
         properties: {
@@ -175,8 +175,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             items: { type: "string" },
             description: "optional samples of copy that was rejected — used to suggest forbidden_words",
           },
+          approved_css: {
+            type: "array",
+            items: { type: "string" },
+            description: "samples of approved CSS — used to suggest palette, font-family, spacing scale, radius scale",
+          },
+          rejected_css: {
+            type: "array",
+            items: { type: "string" },
+            description: "optional samples of rejected CSS — used to filter palette",
+          },
         },
-        required: ["approved"],
       },
     },
   ],
@@ -290,7 +299,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "extract_rules") {
       const approved = (a.approved as string[]) ?? [];
       const rejected = (a.rejected as string[] | undefined) ?? [];
-      const result = extractRules({ approved, rejected });
+      const approvedCss = (a.approved_css as string[] | undefined) ?? [];
+      const rejectedCss = (a.rejected_css as string[] | undefined) ?? [];
+      const result = extractRules({ approved, rejected, approved_css: approvedCss, rejected_css: rejectedCss });
       return {
         content: [
           {

@@ -131,6 +131,23 @@ export const ColorTokenSchema = z.union([
   }),
 ]);
 
+export const ModeOverrideSchema = z.object({
+  name: z.string(),
+  selector: z.string().optional(),
+  tokenOverrides: z
+    .object({
+      color: z.record(z.string(), ColorTokenSchema).optional(),
+      typography: z.record(z.string(), z.unknown()).optional(),
+      dimension: z.record(z.string(), z.string()).optional(),
+      shadow: z.record(z.string(), z.unknown()).optional(),
+      border: z.record(z.string(), z.unknown()).optional(),
+      transition: z.record(z.string(), z.unknown()).optional(),
+      gradient: z.record(z.string(), z.unknown()).optional(),
+      breakpoint: z.record(z.string(), z.number()).optional(),
+    })
+    .optional(),
+});
+
 export const TokensSchema = z
   .object({
     color: z.record(z.string(), ColorTokenSchema).optional(),
@@ -141,6 +158,7 @@ export const TokensSchema = z
     transition: z.record(z.string(), z.unknown()).optional(),
     gradient: z.record(z.string(), z.unknown()).optional(),
     breakpoint: z.record(z.string(), z.number()).optional(),
+    modes: z.array(ModeOverrideSchema).optional(),
   })
   .default({});
 
@@ -298,6 +316,7 @@ export type FeedbackConfig = z.infer<typeof FeedbackConfigSchema>;
 export type CopyConfig = z.infer<typeof CopyConfigSchema>;
 export type CopyRule = z.infer<typeof CopyRuleSchema>;
 export type Tokens = z.infer<typeof TokensSchema>;
+export type ModeOverride = z.infer<typeof ModeOverrideSchema>;
 export type Assets = z.infer<typeof AssetsSchema>;
 export type Components = z.infer<typeof ComponentsSchema>;
 export type Patterns = z.infer<typeof PatternsSchema>;

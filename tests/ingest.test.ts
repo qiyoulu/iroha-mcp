@@ -200,3 +200,58 @@ test("runIngest aggregates contributions across multiple sources", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("parseAndApply resolves w3c curly-brace references", () => {
+  const raw = JSON.stringify({
+    color: {
+      base: {
+        blue: { 6: { $value: "#0070f3", $type: "color" } },
+      },
+      brand: {
+        primary: { $value: "{color.base.blue.6}", $type: "color" },
+      },
+    },
+  });
+  const config = { ...DEFAULT_CONFIG };
+  parseAndApply({ format: "w3c-tokens", raw, identifier: "<test>" }, config);
+  assert.equal(config.tokens?.color?.primary, "#0070f3");
+});
+
+test("parseAndApply resolves nested w3c references", () => {
+  const raw = JSON.stringify({
+    color: {
+      base: { raw: { $value: "#0070f3", $type: "color" } },
+      brand: { primary: { $value: "{color.base.raw}", $type: "color" } },
+      link: { $value: "{color.brand.primary}", $type: "color" },
+    },
+  });
+  const config = { ...DEFAULT_CONFIG };
+  parseAndApply({ format: "w3c-tokens", raw, identifier: "<test>" }, config);
+  assert.equal(config.tokens?.color?.primary, "#0070f3");
+  assert.equal(config.tokens?.color?.link, "#0070f3");
+});
+
+test("parseAndApply reports unresolved references without crashing", () => {
+  const raw = JSON.stringify({
+    color: {
+      brand: {
+        primary: { $value: "{color.nonexistent.thing}", $type: "color" },
+      },
+    },
+  });
+  const config = { ...DEFAULT_CONFIG };
+  const result = parseAndApply({ format: "w3c-tokens", raw, identifier: "<test>" }, config);
+  assert.ok(result.unresolved.some((u) => u.includes("color.brand.primary")));
+});
+
+test("parseAndApply detects cycles and reports them", () => {
+  const raw = JSON.stringify({
+    color: {
+      a: { $value: "{color.b}", $type: "color" },
+      b: { $value: "{color.a}", $type: "color" },
+    },
+  });
+  const config = { ...DEFAULT_CONFIG };
+  const result = parseAndApply({ format: "w3c-tokens", raw, identifier: "<test>" }, config);
+  assert.ok(result.unresolved.length >= 1);
+});

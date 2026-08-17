@@ -138,3 +138,58 @@ test("lintDesign returns no violations when tokens are absent", () => {
   const violations = lintDesign({ snippet, brand: brand_ });
   assert.equal(violations.length, 0);
 });
+
+test("lintDesign warns when mode is missing base color tokens", () => {
+  const brand_ = brand({
+    tokens: {
+      color: {
+        primary: "#EF6F1A",
+        background: "#FAF7F3",
+        foreground: "#232F36",
+      },
+      modes: [
+        {
+          name: "dark",
+          selector: ".dark",
+          tokenOverrides: {
+            color: {
+              primary: "#5B9DFF",
+            },
+          },
+        },
+      ],
+    },
+  });
+  const snippet = `<div class="dark">content</div>`;
+  const violations = lintDesign({ snippet, brand: brand_ });
+  const coverage = violations.filter((v) => v.rule === "mode_coverage");
+  assert.ok(coverage.length >= 1);
+  assert.equal(coverage[0].severity, "warning");
+});
+
+test("lintDesign passes mode coverage when all base tokens are overridden", () => {
+  const brand_ = brand({
+    tokens: {
+      color: {
+        primary: "#EF6F1A",
+        background: "#FAF7F3",
+      },
+      modes: [
+        {
+          name: "dark",
+          selector: ".dark",
+          tokenOverrides: {
+            color: {
+              primary: "#5B9DFF",
+              background: "#0a0a0a",
+            },
+          },
+        },
+      ],
+    },
+  });
+  const snippet = `<div></div>`;
+  const violations = lintDesign({ snippet, brand: brand_ });
+  const coverage = violations.filter((v) => v.rule === "mode_coverage");
+  assert.equal(coverage.length, 0);
+});

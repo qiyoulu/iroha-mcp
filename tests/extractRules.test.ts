@@ -101,3 +101,69 @@ test("extract_rules returns notes for every suggestion", () => {
   assert.ok(result.notes.superlatives.length > 0);
   assert.ok(result.notes.cta_style.length > 0);
 });
+
+test("extract_rules extracts palette from approved_css", () => {
+  const result = extractRules({
+    approved: [],
+    approved_css: [
+      `.btn { background: #EF6F1A; color: #FAF7F3; padding: 16px; }`,
+      `.btn:hover { background: #EF6F1A; }`,
+      `.card { background: #FFFFFF; padding: 24px; }`,
+    ],
+  });
+  assert.ok(result.suggestions.palette);
+  assert.ok(result.suggestions.palette?.primary === "#EF6F1A" || result.suggestions.palette?.primary === "#ef6f1a");
+  assert.ok(result.notes.palette?.includes("candidate"));
+});
+
+test("extract_rules extracts font family from approved_css", () => {
+  const result = extractRules({
+    approved: [],
+    approved_css: [
+      `body { font-family: "Inter", sans-serif; }`,
+      `h1 { font-family: "Inter", system-ui; }`,
+    ],
+  });
+  assert.deepEqual(result.suggestions.font_family?.slice(0, 1), ["Inter"]);
+});
+
+test("extract_rules extracts spacing scale from padding/margin", () => {
+  const result = extractRules({
+    approved: [],
+    approved_css: [
+      `.btn { padding: 8px 16px; margin: 4px; }`,
+      `.card { padding: 24px; margin: 16px; }`,
+      `.hero { padding: 48px; margin: 32px; }`,
+    ],
+  });
+  assert.ok(result.suggestions.spacing_scale);
+  assert.ok(result.suggestions.spacing_scale?.includes("8px"));
+  assert.ok(result.suggestions.spacing_scale?.includes("16px"));
+});
+
+test("extract_rules extracts radius scale", () => {
+  const result = extractRules({
+    approved: [],
+    approved_css: [
+      `.btn { border-radius: 4px; }`,
+      `.btn-lg { border-radius: 9999px; }`,
+      `.card { border-radius: 8px; }`,
+    ],
+  });
+  assert.ok(result.suggestions.radius_scale);
+  assert.ok(result.suggestions.radius_scale?.includes("4px"));
+});
+
+test("extract_rules filters palette by rejected_css", () => {
+  const result = extractRules({
+    approved: [],
+    approved_css: [
+      `.btn { background: #EF6F1A; color: #FAF7F3; }`,
+    ],
+    rejected_css: [
+      `.old-btn { background: #ff0000; color: #ff0000; }`,
+    ],
+  });
+  assert.ok(result.suggestions.palette);
+  assert.ok(!Object.values(result.suggestions.palette).includes("#ff0000"));
+});

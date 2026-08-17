@@ -206,6 +206,23 @@ export function lintDesign({ snippet, brand, rule_severity }: LintDesignInput): 
     }
   }
 
+  if (tokens?.modes && tokens.modes.length > 0 && tokens.color) {
+    const baseColorKeys = new Set(Object.keys(tokens.color));
+    for (const mode of tokens.modes) {
+      if (!mode.tokenOverrides?.color) continue;
+      const modeKeys = Object.keys(mode.tokenOverrides.color);
+      const missing = [...baseColorKeys].filter((k) => !modeKeys.includes(k));
+      if (missing.length > 0) {
+        violations.push({
+          rule: "mode_coverage",
+          severity: severityFor("mode_coverage", rule_severity, "warning"),
+          message: `mode "${mode.name}" is missing ${missing.length} color token(s) defined in base: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}.`,
+          suggestion: `define overrides for all base color tokens in mode "${mode.name}" or remove the mode.`,
+        });
+      }
+    }
+  }
+
   return violations;
 }
 

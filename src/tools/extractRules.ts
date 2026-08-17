@@ -3,6 +3,8 @@ import type { CtaStyle } from "../config/schema.js";
 export type ExtractInput = {
   approved: string[];
   rejected?: string[];
+  approved_css?: string[];
+  rejected_css?: string[];
 };
 
 export type ExtractOutput = {
@@ -13,6 +15,10 @@ export type ExtractOutput = {
     forbid_exclamation: boolean;
     forbid_superlatives: boolean;
     cta_style: CtaStyle;
+    palette?: Record<string, string>;
+    font_family?: string[];
+    spacing_scale?: string[];
+    radius_scale?: string[];
   };
   notes: {
     sentence_case: string;
@@ -21,12 +27,18 @@ export type ExtractOutput = {
     exclamation: string;
     superlatives: string;
     cta_style: string;
+    palette?: string;
+    typography?: string;
+    spacing?: string;
+    radius?: string;
   };
-  sample_size: { approved: number; rejected: number };
+  sample_size: { approved: number; rejected: number; approved_css: number; rejected_css: number };
 };
 
 const CTA_VERB_RE =
   /\b(join|get started|sign up|learn more|try|start|book|contact|register|subscribe|download|request|read more|view|see|explore|discover|build|create|make|launch|go|click|tap)\b(?:\s+[A-Za-z][\w'-]*){0,2}/gi;
+
+const HEX_RE = /#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})\b/gi;
 
 function tokenize(text: string): string[] {
   return text.toLowerCase().match(/[a-z][a-z'-]*/g) ?? [];
@@ -195,6 +207,8 @@ function analyzeCtaStyle(approved: string[]): { suggestion: CtaStyle; note: stri
 export function extractRules(input: ExtractInput): ExtractOutput {
   const approved = input.approved;
   const rejected = input.rejected ?? [];
+  const approvedCss = input.approved_css ?? [];
+  const rejectedCss = input.rejected_css ?? [];
 
   const sentenceCase = analyzeSentenceCase(approved);
   const properNouns = extractProperNounCandidates(approved);
@@ -202,6 +216,10 @@ export function extractRules(input: ExtractInput): ExtractOutput {
   const exclamation = analyzeExclamation(approved);
   const superlatives = analyzeSuperlatives(approved);
   const cta = analyzeCtaStyle(approved);
+  const palette = extractPalette(approvedCss, rejectedCss);
+  const typography = extractTypography(approvedCss);
+  const spacing = extractDimension(approvedCss, /padding|margin|gap|top|left|right|bottom/i);
+  const radius = extractRadius(approvedCss);
 
   return {
     suggestions: {
@@ -211,6 +229,10 @@ export function extractRules(input: ExtractInput): ExtractOutput {
       forbid_exclamation: exclamation.suggestion,
       forbid_superlatives: superlatives.suggestion,
       cta_style: cta.suggestion,
+      palette: palette.suggestions,
+      font_family: typography.families,
+      spacing_scale: spacing.values,
+      radius_scale: radius.values,
     },
     notes: {
       sentence_case: sentenceCase.note,
@@ -219,7 +241,116 @@ export function extractRules(input: ExtractInput): ExtractOutput {
       exclamation: exclamation.note,
       superlatives: superlatives.note,
       cta_style: cta.note,
+      palette: palette.note,
+      typography: typography.note,
+      spacing: spacing.note,
+      radius: radius.note,
     },
-    sample_size: { approved: approved.length, rejected: rejected.length },
+    sample_size: {
+      approved: approved.length,
+      rejected: rejected.length,
+      approved_css: approvedCss.length,
+      rejected_css: rejectedCss.length,
+    },
   };
+}
+
+function extractPalette(approved: string[], rejected: string[]): {
+  suggestions: Record<string, string>;
+  note: string;
+} {
+  const approvedColors = new Map<string, number>();
+  for (const snippet of approved) {
+    for (const match of snippet.matchAll(HEX_RE)) {
+      const hex = match[0].toLowerCase();
+      approvedColors.set(hex, (approvedColors.get(hex) ?? 0) + 1);
+    }
+  }
+  const rejectedColors = new Set<string>();
+  for (const snippet of rejected) {
+    for (const match of snippet.matchAll(HEX_RE)) {
+      rejectedColors.add(match[0].toLowerCase());
+    }
+  }
+  const sorted = [...approvedColors.entries()]
+    .filter(([hex]) => !rejectedColors.has(hex))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 16);
+  const suggestions: Record<string, string> = {};
+  const names = ["primary", "secondary", "accent", "background", "surface", "foreground", "muted", "border"];
+  sorted.forEach(([hex], i) => {
+    suggestions[names[i] ?? `color-${i + 1}`] = hex;
+  });
+  const note =
+    sorted.length === 0
+      ? "no approved colors extracted (provide approved_css samples)."
+      : `${sorted.length} candidate color(s) extracted, top: ${sorted.slice(0, 3).map(([h]) => h).join(", ")}.`;
+  return { suggestions, note };
+}
+
+function extractTypography(approved: string[]): {
+  families: string[];
+  note: string;
+} {
+  const counts = new Map<string, number>();
+  for (const snippet of approved) {
+    const re = /font-family:\s*([^;}\n]+)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(snippet)) !== null) {
+      const family = m[1].split(",")[0].trim().replace(/^["']|["']$/g, "");
+      if (family && family.length > 1 && !family.startsWith("var(")) {
+        counts.set(family, (counts.get(family) ?? 0) + 1);
+      }
+    }
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([f]) => f);
+  const note =
+    sorted.length === 0
+      ? "no font-family declarations found."
+      : `${sorted.length} font family reference(s); primary: ${sorted[0]}.`;
+  return { families: sorted, note };
+}
+
+function extractDimension(approved: string[], contextRe: RegExp): {
+  values: string[];
+  note: string;
+} {
+  const counts = new Map<string, number>();
+  for (const snippet of approved) {
+    const lines = snippet.split("\n");
+    for (const line of lines) {
+      if (!contextRe.test(line)) continue;
+      const re = /(-?\d+(?:\.\d+)?(?:px|rem|em))/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(line)) !== null) {
+        counts.set(m[1], (counts.get(m[1]) ?? 0) + 1);
+      }
+    }
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+  const note =
+    sorted.length === 0
+      ? "no dimension values extracted."
+      : `${sorted.length} dimension value(s); most-used: ${sorted.slice(0, 5).join(", ")}.`;
+  return { values: sorted, note };
+}
+
+function extractRadius(approved: string[]): { values: string[]; note: string } {
+  const counts = new Map<string, number>();
+  for (const snippet of approved) {
+    const re = /border-radius:\s*([^;}\n]+)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(snippet)) !== null) {
+      const value = m[1].trim().replace(/^["']|["']$/g, "");
+      if (value && !value.startsWith("var(")) {
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+      }
+    }
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
+  const note =
+    sorted.length === 0
+      ? "no border-radius values found."
+      : `${sorted.length} radius value(s); most-used: ${sorted.slice(0, 5).join(", ")}.`;
+  return { values: sorted, note };
 }

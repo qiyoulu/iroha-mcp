@@ -55,12 +55,12 @@ function setPath(obj: Record<string, unknown>, path: string[], value: unknown) {
 function flattenW3cTokens(
   obj: unknown,
   prefix: string[] = []
-): Array<{ path: string[]; value: unknown; type?: string }> {
+): Array<{ path: string[]; value: unknown; type?: string; raw?: Record<string, unknown> }> {
   if (!obj || typeof obj !== "object") return [];
-  const out: Array<{ path: string[]; value: unknown; type?: string }> = [];
+  const out: Array<{ path: string[]; value: unknown; type?: string; raw?: Record<string, unknown> }> = [];
   const o = obj as Record<string, unknown>;
   if ("$value" in o) {
-    out.push({ path: prefix, value: o.$value, type: o.$type as string | undefined });
+    out.push({ path: prefix, value: o.$value, type: o.$type as string | undefined, raw: o });
     return out;
   }
   for (const [k, v] of Object.entries(o)) {
@@ -68,6 +68,33 @@ function flattenW3cTokens(
     out.push(...flattenW3cTokens(v, [...prefix, k]));
   }
   return out;
+}
+
+const MAX_REFERENCE_DEPTH = 32;
+
+function resolveReference(
+  ref: string,
+  lookup: Map<string, unknown>,
+  visited: Set<string>,
+  depth: number
+): { resolved: unknown; ok: boolean } {
+  if (depth > MAX_REFERENCE_DEPTH) return { resolved: ref, ok: false };
+  const path = ref.startsWith("{") && ref.endsWith("}")
+    ? ref.slice(1, -1).split(".").filter((s) => s.length > 0)
+    : ref.startsWith("#/")
+      ? ref.slice(2).split("/").filter((s) => s.length > 0).map((s) => s.replace(/\$value$/, "")).filter(Boolean)
+      : null;
+  if (!path) return { resolved: ref, ok: false };
+  if (path[path.length - 1] === "$value") path.pop();
+  const key = path.join(".");
+  if (visited.has(key)) return { resolved: ref, ok: false };
+  visited.add(key);
+  const target = lookup.get(key);
+  if (target === undefined) return { resolved: ref, ok: false };
+  if (typeof target === "string" && (target.startsWith("{") || target.startsWith("#/"))) {
+    return resolveReference(target, lookup, new Set(visited), depth + 1);
+  }
+  return { resolved: target, ok: true };
 }
 
 function parseW3cTokens(source: RecognizedSource, config: BrandConfig): ParsedContribution {
@@ -89,6 +116,31 @@ function parseW3cTokens(source: RecognizedSource, config: BrandConfig): ParsedCo
   }
 
   const flat = flattenW3cTokens(raw);
+
+  const lookup = new Map<string, unknown>();
+  for (const { path, value, raw: rawToken } of flat) {
+    const key = path.join(".");
+    lookup.set(key, value);
+    if (rawToken) lookup.set(`${key}.$value`, value);
+    if (rawToken?.$extensions) lookup.set(`${key}.$extensions`, rawToken.$extensions);
+  }
+
+  for (let i = 0; i < flat.length; i++) {
+    const item = flat[i];
+    if (typeof item.value === "string") {
+      const ref = item.value.trim();
+      if (ref.startsWith("{") || ref.startsWith("#/")) {
+        const { resolved, ok } = resolveReference(ref, lookup, new Set([item.path.join(".")]), 0);
+        if (ok) {
+          flat[i] = { ...item, value: resolved };
+          lookup.set(item.path.join("."), resolved);
+        } else {
+          unresolved.push(`${item.path.join(".")} -> ${ref}`);
+        }
+      }
+    }
+  }
+
   const tokens = ensureTokens(config);
 
   const tokenBuckets: Record<string, Record<string, unknown>> = {
@@ -182,14 +234,39 @@ function inferCategory(name: string, w3cType?: string): string | null {
   if (w3cType === "fontFamily" || w3cType === "fontWeight") return "typography";
 
   const n = name.toLowerCase();
-  if (n.includes("color") || n.includes("bg") || n.includes("fg") || n.includes("brand")) return "color";
-  if (n.includes("font") || n.includes("text") || n.includes("type")) return "typography";
+  if (n.includes("color") || n.includes("bg") || n.includes("fg")) return "color";
+  if (
+    n.includes("font") ||
+    n.includes("text-") ||
+    n.startsWith("text") ||
+    n.includes("weight") ||
+    n.includes("leading") ||
+    n.includes("tracking") ||
+    n === "letter-spacing" ||
+    n.startsWith("letter-spacing") ||
+    n.includes("type")
+  )
+    return "typography";
   if (n.includes("shadow") || n.includes("elevation")) return "shadow";
-  if (n.includes("border")) return "border";
-  if (n.includes("transition") || n.includes("motion") || n.includes("animation")) return "transition";
+  if (n.includes("border") || n.includes("stroke")) return "border";
+  if (n.includes("transition") || n.includes("motion") || n.includes("animation") || n.includes("duration") || n.includes("easing")) return "transition";
   if (n.includes("gradient")) return "gradient";
   if (n.includes("breakpoint") || n.includes("screen")) return "breakpoint";
-  if (n.includes("spacing") || n.includes("space") || n.includes("size") || n.includes("radius") || n.includes("gap")) return "dimension";
+  if (
+    n.includes("space") ||
+    n.includes("spacing") ||
+    n.includes("radius") ||
+    n.includes("size") ||
+    n.includes("gap") ||
+    n.includes("width") ||
+    n.includes("height") ||
+    n.includes("max-") ||
+    n.includes("min-") ||
+    n.includes("padding") ||
+    n.includes("margin") ||
+    n.includes("touch-target")
+  )
+    return "dimension";
   return null;
 }
 
@@ -278,33 +355,64 @@ function parseCss(source: RecognizedSource, config: BrandConfig): ParsedContribu
 
   const tokens = ensureTokens(config);
 
-  const rootMatch = source.raw.match(/:root\s*\{([\s\S]*?)\}/);
-  if (!rootMatch) {
-    return {
-      source_id: source.identifier,
-      format: source.format,
-      applied_paths: [],
-      unresolved: ["no :root block found"],
-      extracted_summary: {},
-    };
-  }
+  const blockRe = /([.#:\[][^{}@]*)\{([\s\S]*?)\}/g;
+  let blockMatch: RegExpExecArray | null;
+  let firstBlock = true;
 
-  const body = rootMatch[1];
-  const declRe = /--([\w-]+)\s*:\s*([^;]+);/g;
-  let m: RegExpExecArray | null;
-  while ((m = declRe.exec(body)) !== null) {
-    const name = m[1];
-    const value = m[2].trim();
-    const category = inferCategory(name);
-    if (!category) {
-      unresolved.push(`${name} (no category)`);
-      continue;
+  while ((blockMatch = blockRe.exec(source.raw)) !== null) {
+    const selector = blockMatch[1].trim();
+    const body = blockMatch[2];
+    const isRoot = /^:root(\s|,|$)/.test(selector);
+    const modeMatch = selector.match(/\.(dark|dark-theme|light-theme|high-contrast|hc|dimmed)\b/);
+    const attrMatch = selector.match(/\[data-(?:color-mode|theme|color-theme)=["']?([^"'\]]+)["']?\]/);
+
+    let modeName: string | null = null;
+    let modeSelector: string | null = null;
+    if (isRoot && firstBlock) {
+      firstBlock = false;
+    } else if (modeMatch) {
+      modeName = normalizeModeName(modeMatch[1]);
+      modeSelector = selector;
+    } else if (attrMatch) {
+      const attrValue = attrMatch[1];
+      if (/dark/.test(attrValue)) modeName = "dark";
+      else if (/light/.test(attrValue)) modeName = "light";
+      else if (/hc|contrast/.test(attrValue)) modeName = "high-contrast";
+      else if (/dimmed/.test(attrValue)) modeName = "dimmed";
+      else modeName = attrValue;
+      modeSelector = selector;
     }
-    const stripped = stripCategoryPrefix(name, category);
-    const target = (tokens as any)[category] ?? {};
-    target[stripped] = value;
-    (tokens as any)[category] = target;
-    applied.push(`${category}.${stripped}`);
+
+    const declRe = /--([\w-]+)\s*:\s*([^;]+);/g;
+    let m: RegExpExecArray | null;
+    while ((m = declRe.exec(body)) !== null) {
+      const name = m[1];
+      const value = m[2].trim();
+      const category = inferCategory(name);
+      if (!category) {
+        unresolved.push(`${name} (no category)`);
+        continue;
+      }
+      const stripped = stripCategoryPrefix(name, category);
+      if (modeName) {
+        if (!tokens.modes) tokens.modes = [];
+        let mode = tokens.modes.find((mo) => mo.name === modeName);
+        if (!mode) {
+          mode = { name: modeName, selector: modeSelector ?? undefined };
+          tokens.modes.push(mode);
+        }
+        if (!mode.tokenOverrides) mode.tokenOverrides = {};
+        const bucket = (mode.tokenOverrides as any)[category] ?? {};
+        bucket[stripped] = value;
+        (mode.tokenOverrides as any)[category] = bucket;
+        applied.push(`modes.${modeName}.${category}.${stripped}`);
+      } else {
+        const target = (tokens as any)[category] ?? {};
+        target[stripped] = value;
+        (tokens as any)[category] = target;
+        applied.push(`${category}.${stripped}`);
+      }
+    }
   }
 
   summary.token_count = applied.length;
@@ -322,6 +430,13 @@ function parseCss(source: RecognizedSource, config: BrandConfig): ParsedContribu
     unresolved,
     extracted_summary: summary,
   };
+}
+
+function normalizeModeName(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower === "hc") return "high-contrast";
+  if (lower.endsWith("-theme")) return lower.replace(/-theme$/, "");
+  return lower;
 }
 
 function parseMarkdown(source: RecognizedSource, config: BrandConfig): ParsedContribution {
