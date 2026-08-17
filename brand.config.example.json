@@ -1,0 +1,22 @@
+{
+  "name": "your brand",
+  "voice": {
+    "sentence_case": true,
+    "proper_nouns": [],
+    "forbidden_words": [],
+    "preferred_words": {},
+    "cta": {
+      "style": "verb_only",
+      "max_words": 3,
+      "require_capitalize": false
+    },
+    "tone_markers": {
+      "forbid_exclamation": true,
+      "forbid_superlatives": false
+    }
+  },
+  "feedback": {
+    "tone": "constructive_direct",
+    "structure": ["summary", "violations", "suggestions", "rewrite"]
+  }
+}

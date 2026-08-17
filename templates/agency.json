@@ -1,0 +1,24 @@
+{
+  "_template": "agency",
+  "_notes": "blank scaffold for agencies — multi-client, proposal-driven, voice varies per client. consider: how strict per client? do you keep per-client configs or one studio-wide config? how do you handle cta variations across deliverables?",
+  "name": "",
+  "voice": {
+    "sentence_case": true,
+    "proper_nouns": [],
+    "forbidden_words": [],
+    "preferred_words": {},
+    "cta": {
+      "style": "verb_only",
+      "max_words": 3,
+      "require_capitalize": false
+    },
+    "tone_markers": {
+      "forbid_exclamation": true,
+      "forbid_superlatives": false
+    }
+  },
+  "feedback": {
+    "tone": "constructive_direct",
+    "structure": ["summary", "violations", "suggestions", "rewrite"]
+  }
+}
