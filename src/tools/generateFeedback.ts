@@ -2,6 +2,7 @@ import { lintCopy, detectSentenceCase, findCtaSpans, type Violation } from "./li
 import type { BrandConfig } from "../config/schema.js";
 import type { z } from "zod";
 import { FeedbackConfigSchema } from "../config/schema.js";
+import { findSuperlatives, escapeRegex } from "../util/regex.js";
 
 export type FeedbackTone = z.infer<typeof FeedbackConfigSchema>["tone"];
 
@@ -28,7 +29,7 @@ function rewrite(text: string, brand: BrandConfig): string {
   for (const forbidden of voice.forbidden_words) {
     const replacement = voice.preferred_words[forbidden.toLowerCase()];
     if (!replacement) continue;
-    const re = new RegExp(`\\b${forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi");
+    const re = new RegExp(`\\b${escapeRegex(forbidden)}\\b`, "gi");
     out = out.replace(re, replacement);
   }
 
@@ -37,9 +38,12 @@ function rewrite(text: string, brand: BrandConfig): string {
   }
 
   if (voice.tone_markers.forbid_superlatives) {
-    out = out.replace(/\b(best|fastest|simplest|greatest|most|ultimate|#1)\b/gi, (match) => {
-      return `[${match.toLowerCase()}]`;
-    });
+    const matches = findSuperlatives(out);
+    // Apply right-to-left so earlier offsets remain valid as we mutate.
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const m = matches[i];
+      out = out.slice(0, m.index) + `[${m[0].toLowerCase()}]` + out.slice(m.index + m[0].length);
+    }
   }
 
   if (voice.sentence_case) {

@@ -25,6 +25,16 @@ export type SetupArgs = {
   target_path?: string;
 };
 
+/**
+ * `Object.prototype.hasOwnProperty.call(args, key)` distinguishes "key present
+ * with falsy value" from "key absent". The previous `??` operator treated both
+ * the same, which meant passing `feedback_structure: []` to clear the list was
+ * silently dropped. With this check, explicit empty values are preserved.
+ */
+function hasOwn(obj: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
 function buildConfigFromArgs(base: BrandConfig, args: Record<string, unknown>): BrandConfig {
   const a = args as Partial<SetupArgs>;
   const baseVoice = base.voice ?? {
@@ -41,28 +51,35 @@ function buildConfigFromArgs(base: BrandConfig, args: Record<string, unknown>): 
   };
   return {
     ...base,
-    name: a.name ?? base.name,
+    name: hasOwn(args, "name") ? a.name ?? base.name : base.name,
     version: base.version ?? "0.3.0",
     voice: {
       ...baseVoice,
-      sentence_case: a.sentence_case ?? baseVoice.sentence_case,
-      proper_nouns: a.proper_nouns ?? baseVoice.proper_nouns,
-      forbidden_words: a.forbidden_words ?? baseVoice.forbidden_words,
-      preferred_words: a.preferred_words ?? baseVoice.preferred_words,
+      sentence_case: hasOwn(args, "sentence_case") ? a.sentence_case ?? baseVoice.sentence_case : baseVoice.sentence_case,
+      proper_nouns: hasOwn(args, "proper_nouns") ? a.proper_nouns ?? baseVoice.proper_nouns : baseVoice.proper_nouns,
+      forbidden_words: hasOwn(args, "forbidden_words") ? a.forbidden_words ?? baseVoice.forbidden_words : baseVoice.forbidden_words,
+      preferred_words: hasOwn(args, "preferred_words") ? a.preferred_words ?? baseVoice.preferred_words : baseVoice.preferred_words,
       cta: {
-        style: a.cta_style ?? baseVoice.cta.style,
-        max_words: a.cta_max_words ?? baseVoice.cta.max_words,
-        require_capitalize:
-          a.cta_require_capitalize ?? baseVoice.cta.require_capitalize,
+        style: hasOwn(args, "cta_style") ? a.cta_style ?? baseVoice.cta.style : baseVoice.cta.style,
+        max_words: hasOwn(args, "cta_max_words") ? a.cta_max_words ?? baseVoice.cta.max_words : baseVoice.cta.max_words,
+        require_capitalize: hasOwn(args, "cta_require_capitalize")
+          ? a.cta_require_capitalize ?? baseVoice.cta.require_capitalize
+          : baseVoice.cta.require_capitalize,
       },
       tone_markers: {
-        forbid_exclamation: a.forbid_exclamation ?? baseVoice.tone_markers.forbid_exclamation,
-        forbid_superlatives: a.forbid_superlatives ?? baseVoice.tone_markers.forbid_superlatives,
+        forbid_exclamation: hasOwn(args, "forbid_exclamation")
+          ? a.forbid_exclamation ?? baseVoice.tone_markers.forbid_exclamation
+          : baseVoice.tone_markers.forbid_exclamation,
+        forbid_superlatives: hasOwn(args, "forbid_superlatives")
+          ? a.forbid_superlatives ?? baseVoice.tone_markers.forbid_superlatives
+          : baseVoice.tone_markers.forbid_superlatives,
       },
     },
     feedback: {
-      tone: a.feedback_tone ?? baseFeedback.tone,
-      structure: a.feedback_structure ?? [...baseFeedback.structure],
+      tone: hasOwn(args, "feedback_tone") ? a.feedback_tone ?? baseFeedback.tone : baseFeedback.tone,
+      structure: hasOwn(args, "feedback_structure")
+        ? a.feedback_structure ?? []
+        : [...baseFeedback.structure],
     },
   };
 }

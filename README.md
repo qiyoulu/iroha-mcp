@@ -6,7 +6,7 @@ Iroha is an MCP server for brand voice tooling. Lint copy and generate feedback 
 
 Iroha ships infrastructure, not opinions. The rule engine is generic; your brand rules are yours to define. Start from a blank scaffold, work through the tutorials, build the config that fits your voice.
 
-## v0 wedge
+## shipped tools
 
 - `lint_copy` — returns violations with rule, severity, span, and suggestion
 - `lint_design` — flags raw hex outside the palette, off-scale dimensions, and color pairs that fail accessibility contrast. Severity configurable per rule.
@@ -121,11 +121,11 @@ The `docs/` directory has guides on thinking, not what to think:
 
 **v0.5 (shipped)** — real-world ingest. JSON5 support (Primer primitives), Style Dictionary / Polaris flat format, composite `$value` parsing (typography, shadow, border, transition, gradient), `{base.*}` wrapper unwrapping with ref rewrite, `{!name}` alias references, `$extensions` traversal, `time` → transition mapping. Validated against Primer primitives (98 light colors, 0 unresolved) and Polaris tokens (73 tokens, 0 unresolved).
 
-- **v0.6** — edit tools: `get_config`, `set_config_field`, `add_forbidden_word`, etc., so you can update your config conversationally through the MCP itself
-- **v1** — LLM-powered `analyze_voice` for nuanced tone comparison (hosted or BYOK)
-- **v2** — rule packs: installable brand bundles per industry / archetype
-- **v3** — hosted team config sync with subscription model
-- **v4** — Figma plugin to surface violations in design review
+- **v0.6 (planned)** — edit tools: `get_config`, `set_config_field`, `add_forbidden_word`, etc., so you can update your config conversationally through the MCP itself
+- **v1 (planned)** — LLM-powered `analyze_voice` for nuanced tone comparison (hosted or BYOK)
+- **v2 (planned)** — rule packs: installable brand bundles per industry / archetype
+- **v3 (planned)** — hosted team config sync with subscription model
+- **v4 (planned)** — Figma plugin to surface violations in design review
 
 ## license
 

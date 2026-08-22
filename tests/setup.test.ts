@@ -92,3 +92,22 @@ test("iroha_setup validates written config against schema", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("iroha_setup preserves explicit empty arrays (audit #11)", () => {
+  // Passing feedback_structure: [] must clear the structure list, not silently
+  // be dropped by `??` falling back to the base. This was the bug.
+  const dir = mkdtempSync(join(tmpdir(), "iroha-setup-"));
+  try {
+    const path = join(dir, "brand.config.json");
+    const result = runSetup({
+      name: "acme studio",
+      target_path: path,
+      feedback_structure: [],
+    });
+    assert.equal(result.status, "saved");
+    if (result.status !== "saved") return;
+    assert.deepEqual(result.config.feedback?.structure, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

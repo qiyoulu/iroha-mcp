@@ -18,6 +18,7 @@ import {
   ExtractRulesArgs,
   formatZodError,
 } from "./schemas.js";
+import { sanitizeErrorMessage } from "./util/regex.js";
 
 const server = new Server(
   {
@@ -315,10 +316,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   } catch (err) {
     // zod errors get the human-readable formatter; everything else surfaces
-    // the message but never a stack trace (audit finding #15).
+    // the message but never a stack trace or filesystem path (audit finding #15).
     const message = err && typeof err === "object" && "issues" in err
       ? formatZodError(err as Parameters<typeof formatZodError>[0])
-      : `error: ${(err as Error).message}`;
+      : `error: ${sanitizeErrorMessage((err as Error).message)}`;
     return {
       content: [{ type: "text", text: message }],
       isError: true,

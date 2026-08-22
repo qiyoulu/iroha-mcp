@@ -1,15 +1,13 @@
 import type { BrandConfig } from "../config/schema.js";
+import { findSuperlatives, findCtaMatches, escapeRegex } from "../util/regex.js";
 
 export type Violation = {
   rule: string;
   message: string;
-  severity: "error" | "warning";
+  severity: "error" | "warning" | "info";
   span?: { start: number; end: number };
   suggestion?: string;
 };
-
-const CTA_VERBS =
-  "(join|get started|sign up|sign-up|learn more|learn-more|try|start|book|contact|register|subscribe|download|request|read more|read-more|view|see|explore|discover|build|create|make|launch|go|click|tap)";
 
 function detectSentenceCase(text: string): Array<{ offset: number; word: string }> {
   const flagged: Array<{ offset: number; word: string }> = [];
@@ -50,23 +48,15 @@ function detectSentenceCase(text: string): Array<{ offset: number; word: string 
 }
 
 function findCtaSpans(text: string): Array<{ start: number; end: number; phrase: string; words: string[] }> {
-  const re = new RegExp(`\\b${CTA_VERBS}\\b(?:\\s+[A-Za-z][\\w'-]*){0,2}`, "gi");
-  const spans: Array<{ start: number; end: number; phrase: string; words: string[] }> = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
+  return findCtaMatches(text).map((m) => {
     const phrase = m[0];
-    spans.push({
+    return {
       start: m.index,
       end: m.index + phrase.length,
       phrase,
       words: phrase.split(/\s+/),
-    });
-  }
-  return spans;
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    };
+  });
 }
 
 export function lintCopy(text: string, brand: BrandConfig): Violation[] {
@@ -175,9 +165,7 @@ export function lintCopy(text: string, brand: BrandConfig): Violation[] {
   }
 
   if (voice.tone_markers.forbid_superlatives) {
-    const supRe = /\b(best|fastest|simplest|greatest|most|ultimate|#1)\b/gi;
-    let m: RegExpExecArray | null;
-    while ((m = supRe.exec(text)) !== null) {
+    for (const m of findSuperlatives(text)) {
       violations.push({
         rule: "tone.no_superlatives",
         message: `superlative "${m[0]}" detected.`,

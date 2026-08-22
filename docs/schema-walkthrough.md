@@ -100,6 +100,59 @@ flag words like "best", "fastest", "simplest", "most", "#1".
 - enable: brands that want to avoid making claims they can't back up. B2B, regulated industries.
 - disable: brands where superlatives are part of differentiation. consumer products, competitive markets.
 
+## `tokens`
+
+design tokens — colors, typography, dimensions, shadows, borders, transitions, gradients, breakpoints. populated automatically by `iroha_ingest` from W3C tokens, Tailwind configs, CSS `:root` blocks, Figma variable exports, or markdown design-system docs.
+
+each section is a flat `{ name: value }` map. values are strings for simple tokens; objects for composite tokens (typography, shadow, etc.) following the W3C design tokens spec.
+
+```json
+{
+  "tokens": {
+    "color": { "primary": "#EF6F1A", "surface": "#FAF7F3" },
+    "typography": {
+      "primary-family": "Inter",
+      "primary-size": "16px"
+    },
+    "dimension": { "space-4": "16px", "radius-default": "4px" }
+  }
+}
+```
+
+### `tokens.modes[]`
+
+theme variants — dark mode, high-contrast, dimmed, etc. each mode declares overrides for any base token via `tokenOverrides`. a mode that doesn't override a token inherits the base.
+
+```json
+{
+  "tokens": {
+    "color": { "primary": "#EF6F1A", "surface": "#FAF7F3", "fg": "#232F36" },
+    "modes": [
+      {
+        "name": "dark",
+        "selector": ".dark-theme",
+        "tokenOverrides": {
+          "color": { "surface": "#232F36", "fg": "#FAF7F3" }
+        }
+      },
+      {
+        "name": "high-contrast",
+        "selector": ".hc",
+        "tokenOverrides": {
+          "color": { "fg": "#000000", "surface": "#FFFFFF" }
+        }
+      }
+    ]
+  }
+}
+```
+
+**when to use modes:** any theme variant that needs different token values. dark mode is the common case; high-contrast and dimmed are accessibility-driven variants.
+
+**`lint_design` mode_coverage rule:** warns when a mode is missing overrides for base color tokens. pick one of two responses: define the override (correct for "this mode needs a different value"), or remove the mode (correct for "this mode shouldn't exist"). partial overrides are valid but worth documenting.
+
+**how modes are populated:** `iroha_ingest` reads CSS blocks outside `:root` and detects theme modifiers (`.dark`, `.dark-theme`, `[data-color-mode="dark"]`) or attribute selectors (`[data-theme="light"]`). W3C tokens can use `modes` keys at the top level. Markdown does not currently populate modes.
+
 ## `feedback`
 
 how `generate_feedback` formats its response.

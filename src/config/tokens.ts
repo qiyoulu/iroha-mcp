@@ -1,4 +1,5 @@
 import type { BrandConfig } from "./schema.js";
+import { HEX_RE, RGB_RE, PX_RE, TAILWIND_COLOR_RE } from "../util/regex.js";
 
 export type DesignViolation = {
   rule: string;
@@ -7,11 +8,6 @@ export type DesignViolation = {
   span?: { start: number; end: number };
   suggestion?: string;
 };
-
-const HEX_RE = /#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})\b/gi;
-const RGB_RE = /rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)/gi;
-const PX_RE = /-?\d+(?:\.\d+)?(?:px|rem|em)\b/g;
-const TAILWIND_COLOR_RE = /\b(?:bg|text|border|fill|stroke|from|via|to|ring|outline|divide|placeholder|caret|accent|decoration|shadow)-(?:[a-z]+-)?[a-z]+-\d{2,3}\b/g;
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const cleaned = hex.replace(/^#/, "");

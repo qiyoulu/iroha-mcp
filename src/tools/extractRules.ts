@@ -1,4 +1,5 @@
 import type { CtaStyle } from "../config/schema.js";
+import { HEX_RE, CTA_VERB_RE } from "../util/regex.js";
 
 export type ExtractInput = {
   approved: string[];
@@ -34,11 +35,6 @@ export type ExtractOutput = {
   };
   sample_size: { approved: number; rejected: number; approved_css: number; rejected_css: number };
 };
-
-const CTA_VERB_RE =
-  /\b(join|get started|sign up|learn more|try|start|book|contact|register|subscribe|download|request|read more|view|see|explore|discover|build|create|make|launch|go|click|tap)\b(?:\s+[A-Za-z][\w'-]*){0,2}/gi;
-
-const HEX_RE = /#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})\b/gi;
 
 function tokenize(text: string): string[] {
   return text.toLowerCase().match(/[a-z][a-z'-]*/g) ?? [];
