@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { BrandConfigSchema, type BrandConfig } from "./schema.js";
 
 const DEFAULT_SEARCH_PATHS = ["./brand.config.json", "./.brandrc.json"];
@@ -11,58 +12,38 @@ function fallbackConfigPath(): string {
 
 const DEFAULT_BRAND_NAME = "your brand";
 
-const DEFAULT_CONFIG: BrandConfig = {
-  name: DEFAULT_BRAND_NAME,
-  version: "0.3.0",
-  meta: {
-    source: "manual",
-    schemaVersion: "0.3.0",
-  },
-  voice: {
-    sentence_case: true,
-    proper_nouns: [],
-    forbidden_words: [],
-    preferred_words: {},
-    cta: {
-      style: "free",
-      max_words: 3,
-      require_capitalize: false,
-    },
-    tone_markers: {
-      forbid_exclamation: true,
-      forbid_superlatives: true,
-    },
-  },
-  feedback: {
-    tone: "constructive_direct",
-    structure: ["summary", "violations", "suggestions", "rewrite"],
-  },
-  tokens: {},
-  copy: {
-    voice: { principles: [] },
-    rules: [],
-    ctas: [],
-    ctaLocks: [],
-    terminology: [],
-    perChannel: [],
-  },
-  assets: { logos: [], fonts: [] },
-  components: { inventory: [] },
-  patterns: { scenarios: [] },
-  accessibility: {
-    contrast: { minimum: 4.5, prefer: "WCAG2" as const },
-    focusRing: { color: "primary", width: "2px", offset: "2px" },
-    minHitTarget: "44px",
-    colorAloneBanned: true,
-    shapeSignalRequired: true,
-  },
-  i18n: {
-    defaultLocale: "en-US",
-    supported: [],
-    doNotTranslate: [],
-    glossary: [],
-  },
-};
+/**
+ * Default config is loaded from `brand.config.example.json` at module init
+ * and validated against the schema. The example file is the single source
+ * of truth: editing it changes both the docs-facing scaffold and the
+ * auto-written fallback in lockstep. Validation at load time catches drift
+ * before it ships.
+ */
+function loadDefaultFromDisk(): BrandConfig {
+  const here = dirname(fileURLToPath(import.meta.url));
+  // dist/index.js → ../../brand.config.example.json ; src/config/loadConfig.ts → ../../brand.config.example.json
+  const candidates = [
+    resolve(here, "..", "..", "brand.config.example.json"),
+    resolve(here, "..", "brand.config.example.json"),
+    resolve(process.cwd(), "brand.config.example.json"),
+  ];
+  let lastErr: unknown;
+  for (const p of candidates) {
+    if (!existsSync(p)) continue;
+    try {
+      const raw = readFileSync(p, "utf8");
+      return BrandConfigSchema.parse(JSON.parse(raw));
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw new Error(
+    `iroha-mcp: could not load brand.config.example.json from any candidate path. ` +
+      `expected it next to dist/ or at the repo root. last error: ${String(lastErr)}`
+  );
+}
+
+const DEFAULT_CONFIG: BrandConfig = loadDefaultFromDisk();
 
 export type LoadResult = {
   config: BrandConfig;
@@ -105,7 +86,9 @@ export function loadBrandConfig(explicitPath?: string): LoadResult {
     }
     const config = tryParseAtPath(abs);
     if (!config) {
-      throw new Error(`brand config not found at ${abs}.`);
+      // unreachable today: tryParseAtPath throws on parse failure, never returns null.
+      // kept as defense in depth if that contract ever changes.
+      throw new Error(`brand config at ${abs} could not be loaded.`);
     }
     return { config, isDefault: false, configPath: abs };
   }

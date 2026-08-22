@@ -130,17 +130,13 @@ export function lintDesign({ snippet, brand, rule_severity }: LintDesignInput): 
 
     const twMatches = [...snippet.matchAll(TAILWIND_COLOR_RE)];
     for (const m of twMatches) {
-      const valuePart = m[0].split("-").slice(-1)[0];
-      const inferredHex = `#${"0".repeat(6)}`;
-      if (!palette.has(inferredHex)) {
-        violations.push({
-          rule: "hard_token_reference",
-          severity: severityFor("hard_token_reference", rule_severity, "warning"),
-          message: `tailwind color utility "${m[0]}" — verify it's a brand palette entry.`,
-          span: { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length },
-          suggestion: "ensure the color scale exists in tokens.color.",
-        });
-      }
+      violations.push({
+        rule: "hard_token_reference",
+        severity: severityFor("hard_token_reference", rule_severity, "warning"),
+        message: `tailwind color utility "${m[0]}" — verify it maps to a brand palette entry.`,
+        span: { start: m.index ?? 0, end: (m.index ?? 0) + m[0].length },
+        suggestion: `ensure the color scale (e.g. ${m[0].split("-").slice(0, -1).join("-")}-*) is defined in tokens.color.`,
+      });
     }
   }
 

@@ -32,6 +32,11 @@ test("detectFormat identifies markdown", () => {
 
 test("readSource reads file from path", () => {
   const dir = mkdtempSync(join(tmpdir(), "iroha-ingest-"));
+  // The sources allowlist is resolved at module load and includes cwd. chdir
+  // into the tmp dir so this test's path falls inside the allowlist. Restore
+  // the previous cwd in finally so we don't pollute later tests.
+  const prevCwd = process.cwd();
+  process.chdir(dir);
   try {
     const path = join(dir, "tokens.css");
     writeFileSync(path, `:root { --color-primary: #EF6F1A; --space-4: 16px; }`);
@@ -39,8 +44,22 @@ test("readSource reads file from path", () => {
     assert.equal(source.format, "css");
     assert.equal(source.identifier, path);
   } finally {
+    process.chdir(prevCwd);
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("readSource rejects paths outside the allowlist", () => {
+  // Path traversal guard: an MCP client must not be able to read arbitrary
+  // files (e.g. ~/.ssh/id_ed25519). Audit finding #2.
+  assert.throws(
+    () => readSource({ path: "/Users/qiyou/.ssh/id_ed25519" }),
+    /path is not within an allowed directory/
+  );
+  assert.throws(
+    () => readSource({ path: "/etc/passwd" }),
+    /path is not within an allowed directory/
+  );
 });
 
 test("readSource uses inline content when no path", () => {

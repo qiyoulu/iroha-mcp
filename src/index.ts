@@ -9,6 +9,15 @@ import { generateFeedback } from "./tools/generateFeedback.js";
 import { runSetup } from "./tools/setup.js";
 import { runIngest } from "./tools/ingest.js";
 import { extractRules } from "./tools/extractRules.js";
+import {
+  LintCopyArgs,
+  LintDesignArgs,
+  GenerateFeedbackArgs,
+  IngestArgs,
+  SetupArgs,
+  ExtractRulesArgs,
+  formatZodError,
+} from "./schemas.js";
 
 const server = new Server(
   {
@@ -84,7 +93,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "iroha_ingest",
       description:
-        "Build a brand.config.json from existing brand materials (paths or inline content). Recognizes w3c design tokens JSON, tailwind theme configs, CSS :root blocks, figma variables JSON, and markdown design-system docs (color tokens, typography, spacing, voice, banned register, components, accessibility, logo files). Returns what was extracted, what paths it was applied to, and what couldn't be classified.",
+        "Build a brand.config.json from existing brand materials (paths or inline content). Recognizes W3C design tokens JSON, tailwind theme configs, CSS :root blocks, figma variables JSON, and markdown design-system docs (color tokens, typography, spacing, voice, banned register, components, accessibility, logo files). Returns what was extracted, what paths it was applied to, and what couldn't be classified. Paths must resolve within an allowed directory: the current working directory, ~/.config/iroha-mcp/, or directories listed in the IROHA_ALLOW_PATH env var. Use inline `content` to bypass the path restriction.",
       inputSchema: {
         type: "object",
         properties: {
@@ -193,13 +202,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const a = args as Record<string, unknown>;
 
   try {
     if (name === "lint_copy") {
-      const text = String(a.text);
-      const result = loadBrandConfig(a.brand_config_path as string | undefined);
-      const violations = lintCopy(text, result.config);
+      const a = LintCopyArgs.parse(args ?? {});
+      const result = loadBrandConfig(a.brand_config_path);
+      const violations = lintCopy(a.text, result.config);
       const content: Array<{ type: string; text: string }> = [
         {
           type: "text",
@@ -216,10 +224,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "lint_design") {
-      const snippet = String(a.snippet);
-      const result = loadBrandConfig(a.brand_config_path as string | undefined);
-      const ruleSeverity = (a.rule_severity ?? {}) as Record<string, "error" | "warning" | "info">;
-      const violations = lintDesign({ snippet, brand: result.config, rule_severity: ruleSeverity });
+      const a = LintDesignArgs.parse(args ?? {});
+      const result = loadBrandConfig(a.brand_config_path);
+      const violations = lintDesign({ snippet: a.snippet, brand: result.config, rule_severity: a.rule_severity });
       const content: Array<{ type: string; text: string }> = [
         {
           type: "text",
@@ -236,10 +243,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "generate_feedback") {
-      const draft = String(a.draft);
-      const context = (a.context as string | undefined) ?? null;
-      const result = loadBrandConfig(a.brand_config_path as string | undefined);
-      const feedback = generateFeedback(draft, context, result.config);
+      const a = GenerateFeedbackArgs.parse(args ?? {});
+      const result = loadBrandConfig(a.brand_config_path);
+      const feedback = generateFeedback(a.draft, a.context ?? null, result.config);
       const content: Array<{ type: string; text: string }> = [
         {
           type: "text",
@@ -256,23 +262,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "iroha_ingest") {
-      const sourcesRaw = (a.sources as Array<Record<string, unknown>>) ?? [];
-      const sources = sourcesRaw.map((s) => ({
-        path: s.path as string | undefined,
-        content: s.content as string | undefined,
-        format_hint: s.format_hint as
-          | "w3c-tokens"
-          | "tailwind"
-          | "css"
-          | "markdown"
-          | "figma-variables"
-          | "auto"
-          | undefined,
-      }));
+      const a = IngestArgs.parse(args ?? {});
       const result = runIngest({
-        sources,
-        brand_name: a.brand_name as string | undefined,
-        target_path: a.target_path as string | undefined,
+        sources: a.sources,
+        brand_name: a.brand_name,
+        target_path: a.target_path,
       });
       return {
         content: [
@@ -285,6 +279,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "iroha_setup") {
+      const a = SetupArgs.parse(args ?? {});
       const result = runSetup(a);
       return {
         content: [
@@ -297,11 +292,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === "extract_rules") {
-      const approved = (a.approved as string[]) ?? [];
-      const rejected = (a.rejected as string[] | undefined) ?? [];
-      const approvedCss = (a.approved_css as string[] | undefined) ?? [];
-      const rejectedCss = (a.rejected_css as string[] | undefined) ?? [];
-      const result = extractRules({ approved, rejected, approved_css: approvedCss, rejected_css: rejectedCss });
+      const a = ExtractRulesArgs.parse(args ?? {});
+      const result = extractRules({
+        approved: a.approved,
+        rejected: a.rejected ?? [],
+        approved_css: a.approved_css ?? [],
+        rejected_css: a.rejected_css ?? [],
+      });
       return {
         content: [
           {
@@ -317,8 +314,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       isError: true,
     };
   } catch (err) {
+    // zod errors get the human-readable formatter; everything else surfaces
+    // the message but never a stack trace (audit finding #15).
+    const message = err && typeof err === "object" && "issues" in err
+      ? formatZodError(err as Parameters<typeof formatZodError>[0])
+      : `error: ${(err as Error).message}`;
     return {
-      content: [{ type: "text", text: `error: ${(err as Error).message}` }],
+      content: [{ type: "text", text: message }],
       isError: true,
     };
   }
