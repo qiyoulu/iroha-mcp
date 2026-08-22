@@ -2,7 +2,7 @@
 
 > Color into language. Language into order.
 
-Iroha is an MCP server for brand voice tooling. Lint copy and generate feedback against locked brand rules from inside Claude Desktop, Cursor, or any MCP-aware client. The name carries both halves: **iro** (color, the design side) and **ha** (the third syllable in the iroha poem that orders all kana, the writing side).
+Iroha is an MCP server for brand voice tooling. Lint copy and generate feedback against locked brand rules from inside Claude Desktop, Cursor, or any MCP-aware client. The name is the first three syllables of the traditional kana ordering — **iro** (色, color) and **ha** (羽, feather, as in the quill). It is also the opening of the *iroha uta*, the 47-mora classical poem that contains every kana exactly once.
 
 Iroha ships infrastructure, not opinions. The rule engine is generic; your brand rules are yours to define. Start from a blank scaffold, work through the tutorials, build the config that fits your voice.
 
